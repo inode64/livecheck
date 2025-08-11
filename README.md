@@ -67,9 +67,14 @@ Options:
 
 ## Heuristic update detection
 
+
 This package can do automated lookups based on commonly used hosts. Currently:
 
 - Bitbucket
+- Bitbucket Pipelines Runner (changelog)
+- Atlassian FishEye (RSS)
+- Atlassian Crucible (RSS)
+- Atlassian Crowd (RSS)
 - Davinci products
 - GitHub archives
 - GitHub commit hashes
