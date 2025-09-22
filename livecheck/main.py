@@ -125,6 +125,51 @@ log = logging.getLogger(__name__)
 __all__ = ('main',)
 
 
+Candidate = tuple[str, str, str, str]
+"""Type alias representing a potential update candidate."""
+
+EMPTY_CANDIDATE: Candidate = ('', '', '', '')
+"""Default empty candidate."""
+
+
+def select_best_candidate(current: Candidate, candidate: Candidate) -> Candidate:
+    """Select the best candidate between ``current`` and ``candidate``."""
+    last_version, top_hash, hash_date, url = candidate
+    if not last_version and not top_hash:
+        return current
+
+    if current == EMPTY_CANDIDATE:
+        return candidate
+
+    current_version, current_hash, current_hash_date, current_url = current
+
+    if last_version:
+        if not current_version:
+            return candidate
+        if compare_versions(current_version, last_version):
+            return candidate
+        if last_version == current_version:
+            if not current_hash and top_hash:
+                return candidate
+            if not current_hash_date and hash_date:
+                return candidate
+            if not current_url and url:
+                return candidate
+        return current
+
+    if current_version:
+        return current
+
+    if not current_hash and top_hash:
+        return candidate
+    if not current_hash_date and hash_date:
+        return candidate
+    if not current_url and url:
+        return candidate
+
+    return current
+
+
 def process_submodules(pkg_name: str, ref: str, contents: str, repo_uri: str) -> str:
     """Process submodules in the ebuild contents."""
     if pkg_name not in SUBMODULES:
@@ -210,18 +255,19 @@ def parse_url(src_uri: str, ebuild: str, settings: LivecheckSettings, *,
 
 
 def parse_metadata(repo_root: str, ebuild: str,
-                   settings: LivecheckSettings) -> tuple[str, str, str, str]:
+                   settings: LivecheckSettings) -> Candidate:
     """Parse ``metadata.xml`` for upstream information."""
     catpkg, _, _, _ = catpkg_catpkgsplit(ebuild)
     metadata_file = Path(repo_root) / catpkg / 'metadata.xml'
     if not metadata_file.exists():
-        return '', '', '', ''
+        return EMPTY_CANDIDATE
     try:
         root = ET.parse(metadata_file).getroot()
     except ET.ParseError:
         log.exception('Error parsing %s.', metadata_file)
-        return '', '', '', ''
+        return EMPTY_CANDIDATE
     assert root is not None
+    best_candidate = EMPTY_CANDIDATE
     for upstream in root.findall('upstream'):
         for subelem in upstream:
             last_version = top_hash = hash_date = url = ''
@@ -248,9 +294,11 @@ def parse_metadata(repo_root: str, ebuild: str,
                     last_version = get_latest_sourceforge_metadata(remote, ebuild, settings)
                 if PYPI_METADATA in type_:
                     last_version, url = get_latest_pypi_metadata(remote, ebuild, settings)
-                if last_version or top_hash:
-                    return last_version, top_hash, hash_date, url
-    return '', '', '', ''
+                best_candidate = select_best_candidate(
+                    best_candidate,
+                    (last_version, top_hash, hash_date, url),
+                )
+    return best_candidate
 
 
 def extract_restrict_version(cp: str) -> tuple[str, str]:
@@ -301,6 +349,7 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
             log.debug('Ignoring %s.', catpkg)
             continue
         log.info('Processing: %s | Version: %s', catpkg, ebuild_version)
+        best_candidate = EMPTY_CANDIDATE
         last_version = hash_date = top_hash = url = ''
         ebuild = Path(repo_root) / catpkg / f'{pkg}-{ebuild_version}.ebuild'
         egit, branch = get_egit_repo(ebuild)
@@ -318,40 +367,69 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
             # remove -r* from version
             last_version = re.sub(r'-r\d+$', '', last_version)
         if settings.type_packages.get(catpkg) == TYPE_DAVINCI:
-            last_version = get_latest_davinci_package(pkg)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (get_latest_davinci_package(pkg), '', '', ''),
+            )
         elif settings.type_packages.get(catpkg) == TYPE_METADATA:
-            last_version, top_hash, hash_date, url = parse_metadata(str(repo_root), match, settings)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                parse_metadata(str(repo_root), match, settings),
+            )
         elif settings.type_packages.get(catpkg) == TYPE_DIRECTORY:
             url, _ = settings.custom_livechecks[catpkg]
             last_version, url = get_latest_directory_package(url, match, settings)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (last_version, '', '', url),
+            )
         elif settings.type_packages.get(catpkg) == TYPE_REPOLOGY:
             package, _ = settings.custom_livechecks[catpkg]
-            last_version = get_latest_repology(match, settings, package)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (get_latest_repology(match, settings, package), '', '', ''),
+            )
         elif settings.type_packages.get(catpkg) == TYPE_REGEX:
             url, regex = settings.custom_livechecks[catpkg]
             last_version, hash_date, url = get_latest_regex_package(match, url, regex, settings)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (last_version, '', hash_date, url),
+            )
         elif settings.type_packages.get(catpkg) == TYPE_CHECKSUM:
             last_version, hash_date, url = get_latest_checksum_package(
                 src_uri, match, str(repo_root))
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (last_version, '', hash_date, url),
+            )
         elif settings.type_packages.get(catpkg) == TYPE_COMMIT:
-            last_version, top_hash, hash_date, url = parse_url(egit,
-                                                               match,
-                                                               settings,
-                                                               force_sha=True)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                parse_url(egit,
+                          match,
+                          settings,
+                          force_sha=True),
+            )
         else:
-            if egit:
-                last_version, top_hash, hash_date, url = parse_url(egit,
-                                                                   match,
-                                                                   settings,
-                                                                   force_sha=True)
-            if not last_version and not top_hash:
-                last_version, top_hash, hash_date, url = parse_url(src_uri,
-                                                                   match,
-                                                                   settings,
-                                                                   force_sha=False)
-            if not last_version and not top_hash:
-                last_version, top_hash, hash_date, url = parse_metadata(
-                    str(repo_root), match, settings)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                parse_url(egit,
+                          match,
+                          settings,
+                          force_sha=True) if egit else EMPTY_CANDIDATE,
+            )
+            best_candidate = select_best_candidate(
+                best_candidate,
+                parse_url(src_uri,
+                          match,
+                          settings,
+                          force_sha=False),
+            )
+            best_candidate = select_best_candidate(
+                best_candidate,
+                parse_metadata(str(repo_root), match, settings),
+            )
             # Try check for homepage
             homes = [
                 x
@@ -359,21 +437,31 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
                 if x
             ]
             for home in homes:
-                if not last_version and not top_hash:
-                    last_version, top_hash, hash_date, url = parse_url(home,
-                                                                       match,
-                                                                       settings,
-                                                                       force_sha=False)
-            if not last_version and not top_hash:
-                last_version = get_latest_repology(match, settings)
+                best_candidate = select_best_candidate(
+                    best_candidate,
+                    parse_url(home,
+                              match,
+                              settings,
+                              force_sha=False),
+                )
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (get_latest_repology(match, settings), '', '', ''),
+            )
             # Only check directory if no other method was found
-            if not last_version and not top_hash:
-                last_version, url = get_latest_directory_package(src_uri, match, settings)
-                for home in homes:
-                    last_version, url = get_latest_directory_package(home, match, settings)
-                    if last_version:
-                        break
+            directory_version, directory_url = get_latest_directory_package(src_uri, match, settings)
+            best_candidate = select_best_candidate(
+                best_candidate,
+                (directory_version, '', '', directory_url),
+            )
+            for home in homes:
+                directory_version, directory_url = get_latest_directory_package(home, match, settings)
+                best_candidate = select_best_candidate(
+                    best_candidate,
+                    (directory_version, '', '', directory_url),
+                )
 
+        last_version, top_hash, hash_date, url = best_candidate
         if last_version or top_hash:
             log.debug('Inserting %s: %s -> %s : %s', catpkg, ebuild_version, last_version, top_hash)
             yield (cat, pkg, ebuild_version, last_version, top_hash, hash_date, url)
