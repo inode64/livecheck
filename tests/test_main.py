@@ -99,6 +99,8 @@ def mock_settings(mocker: MockerFixture) -> Any:
     settings.no_auto_update = set()
     settings.nodejs_packages = set()
     settings.maven_packages = set()
+    settings.detection_method = 'version'
+    settings.detection_methods = {}
     settings.progress_flag = False
     settings.sha_sources = {}
     settings.sync_version = {}
@@ -1492,6 +1494,8 @@ def mock_settings2(mocker: MockerFixture) -> Any:
     settings.sync_version = {}
     settings.custom_livechecks = {}
     settings.branches = {}
+    settings.detection_method = 'version'
+    settings.detection_methods = {}
     settings.restrict_version_process = None
     return settings
 
@@ -1534,8 +1538,113 @@ def test_get_props_basic_yields(mocker: MockerFixture, fake_repo: Path,
                         'https://example.com/pkg-1.0.0.tar.gz')]
 
 
+def test_get_props_detection_method_commit(mocker: MockerFixture, fake_repo: Path,
+                                           mock_settings2: Mock) -> None:
+    mock_settings2.detection_method = 'commit'
+    mocker.patch('livecheck.main.get_highest_matches', return_value=['cat/pkg-1.0.0'])
+    mocker.patch('livecheck.main.catpkg_catpkgsplit',
+                 return_value=('cat/pkg', 'cat', 'pkg', '1.0.0'))
+    mocker.patch('livecheck.main.get_first_src_uri',
+                 return_value='https://example.com/pkg-1.0.0.tar.gz')
+    mocker.patch('livecheck.main.get_egit_repo', return_value=('', ''))
+    mocker.patch('livecheck.main.get_old_sha', return_value='')
+    mocker.patch('livecheck.main.catpkgsplit2', return_value=('cat', 'pkg', '1.0.0', 'r0'))
+    mocker.patch('livecheck.main.compare_versions', return_value=True)
+    mocker.patch('livecheck.main.remove_leading_zeros', side_effect=lambda v: v)
+    mocker.patch('livecheck.main.P.aux_get', return_value=['https://homepage'])
+    mocker.patch('livecheck.main.log')
+    mocker.patch('livecheck.main.parse_url',
+                 return_value=('ver', 'sha', 'date', 'https://example.com/pkg-1.0.0.tar.gz'))
+    results = list(
+        get_props(search_dir=fake_repo,
+                  repo_root=fake_repo,
+                  settings=mock_settings2,
+                  names=['cat/pkg'],
+                  exclude=[]))
+    assert results == [('cat', 'pkg', '1.0.0', '', 'sha', 'date',
+                        'https://example.com/pkg-1.0.0.tar.gz')]
+
+
+def test_get_props_detection_method_commit_no_hash(mocker: MockerFixture, fake_repo: Path,
+                                                   mock_settings2: Mock) -> None:
+    mock_settings2.detection_method = 'commit'
+    mocker.patch('livecheck.main.get_highest_matches', return_value=['cat/pkg-1.0.0'])
+    mocker.patch('livecheck.main.catpkg_catpkgsplit',
+                 return_value=('cat/pkg', 'cat', 'pkg', '1.0.0'))
+    mocker.patch('livecheck.main.get_first_src_uri',
+                 return_value='https://example.com/pkg-1.0.0.tar.gz')
+    mocker.patch('livecheck.main.get_egit_repo', return_value=('', ''))
+    mocker.patch('livecheck.main.log')
+    mocker.patch('livecheck.main.parse_url', return_value=('ver', '', '', ''))
+    mocker.patch('livecheck.main.remove_leading_zeros', side_effect=lambda v: v)
+    mocker.patch('livecheck.main.compare_versions', return_value=True)
+    mocker.patch('livecheck.main.catpkgsplit2', return_value=('cat', 'pkg', '1.0.0', 'r0'))
+    mocker.patch('livecheck.main.P.aux_get', return_value=['https://homepage'])
+    results = list(
+        get_props(search_dir=fake_repo,
+                  repo_root=fake_repo,
+                  settings=mock_settings2,
+                  names=['cat/pkg'],
+                  exclude=[]))
+    assert results == []
+
+
+def test_get_props_detection_method_tag(mocker: MockerFixture, fake_repo: Path,
+                                        mock_settings2: Mock) -> None:
+    mock_settings2.detection_method = 'tag'
+    mocker.patch('livecheck.main.get_highest_matches', return_value=['cat/pkg-1.0.0'])
+    mocker.patch('livecheck.main.catpkg_catpkgsplit',
+                 return_value=('cat/pkg', 'cat', 'pkg', '1.0.0'))
+    mocker.patch('livecheck.main.get_first_src_uri',
+                 return_value='https://example.com/pkg-1.0.0.tar.gz')
+    mocker.patch('livecheck.main.get_egit_repo', return_value=('', ''))
+    mocker.patch('livecheck.main.get_old_sha', return_value='')
+    mocker.patch('livecheck.main.catpkgsplit2', return_value=('cat', 'pkg', '1.0.0', 'r0'))
+    mocker.patch('livecheck.main.compare_versions', return_value=True)
+    mocker.patch('livecheck.main.remove_leading_zeros', side_effect=lambda v: v)
+    mocker.patch('livecheck.main.P.aux_get', return_value=['https://homepage'])
+    mocker.patch('livecheck.main.log')
+    mocker.patch('livecheck.main.parse_url',
+                 return_value=('ver', 'sha', 'date', 'https://example.com/pkg-1.0.0.tar.gz'))
+    results = list(
+        get_props(search_dir=fake_repo,
+                  repo_root=fake_repo,
+                  settings=mock_settings2,
+                  names=['cat/pkg'],
+                  exclude=[]))
+    assert results == [('cat', 'pkg', '1.0.0', 'ver', '', 'date',
+                        'https://example.com/pkg-1.0.0.tar.gz')]
+
+
+def test_get_props_detection_method_override(mocker: MockerFixture, fake_repo: Path,
+                                             mock_settings2: Mock) -> None:
+    mock_settings2.detection_methods = {'cat/pkg': 'commit'}
+    mocker.patch('livecheck.main.get_highest_matches', return_value=['cat/pkg-1.0.0'])
+    mocker.patch('livecheck.main.catpkg_catpkgsplit',
+                 return_value=('cat/pkg', 'cat', 'pkg', '1.0.0'))
+    mocker.patch('livecheck.main.get_first_src_uri',
+                 return_value='https://example.com/pkg-1.0.0.tar.gz')
+    mocker.patch('livecheck.main.get_egit_repo', return_value=('', ''))
+    mocker.patch('livecheck.main.get_old_sha', return_value='')
+    mocker.patch('livecheck.main.catpkgsplit2', return_value=('cat', 'pkg', '1.0.0', 'r0'))
+    mocker.patch('livecheck.main.compare_versions', return_value=True)
+    mocker.patch('livecheck.main.remove_leading_zeros', side_effect=lambda v: v)
+    mocker.patch('livecheck.main.P.aux_get', return_value=['https://homepage'])
+    mocker.patch('livecheck.main.log')
+    mocker.patch('livecheck.main.parse_url',
+                 return_value=('ver', 'sha', 'date', 'https://example.com/pkg-1.0.0.tar.gz'))
+    results = list(
+        get_props(search_dir=fake_repo,
+                  repo_root=fake_repo,
+                  settings=mock_settings2,
+                  names=['cat/pkg'],
+                  exclude=[]))
+    assert results == [('cat', 'pkg', '1.0.0', '', 'sha', 'date',
+                        'https://example.com/pkg-1.0.0.tar.gz')]
+
+
 def test_get_props_exclude_package(mocker: MockerFixture, fake_repo: Path,
-                                   mock_settings2: Mock) -> None:
+                                    mock_settings2: Mock) -> None:
     mocker.patch('livecheck.main.get_highest_matches', return_value=['cat/pkg-1.0.0'])
     mocker.patch('livecheck.main.catpkg_catpkgsplit',
                  return_value=('cat/pkg', 'cat', 'pkg', '1.0.0'))

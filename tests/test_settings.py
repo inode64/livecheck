@@ -6,6 +6,7 @@ import json
 import operator
 
 from livecheck.settings import (
+    DETECTION_VERSION,
     TYPE_DIRECTORY,
     TYPE_REGEX,
     LivecheckSettings,
@@ -49,6 +50,8 @@ def test_livecheck_settings_defaults() -> None:
     assert isinstance(s.restrict_version, dict)
     assert isinstance(s.sync_version, dict)
     assert isinstance(s.stable_version, dict)
+    assert isinstance(s.detection_methods, dict)
+    assert s.detection_method == DETECTION_VERSION
     assert s.auto_update_flag is False
     assert s.debug_flag is False
     assert s.development_flag is False
@@ -130,6 +133,13 @@ def test_gather_settings_with_transformation_function(tmp_path: Path) -> None:
     assert 'cat/pkg' in result.transformations
     assert callable(result.transformations['cat/pkg'])
     assert result.transformations['cat/pkg']('re3_v1') == '1'
+
+
+def test_gather_settings_with_detection_method(tmp_path: Path) -> None:
+    data = {'detection_method': 'Commit'}
+    make_json_file(tmp_path, 'cat/pkg/livecheck.json', data)
+    result = gather_settings(tmp_path)
+    assert result.detection_methods['cat/pkg'] == 'commit'
 
 
 def test_gather_settings_with_utils_transformation(tmp_path: Path, mocker: MockerFixture,

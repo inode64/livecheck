@@ -14,10 +14,26 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
-__all__ = ('TYPE_CHECKSUM', 'TYPE_COMMIT', 'TYPE_DAVINCI', 'TYPE_DIRECTORY', 'TYPE_METADATA',
-           'TYPE_NONE', 'TYPE_REGEX', 'TYPE_REPOLOGY', 'LivecheckSettings', 'gather_settings')
+__all__ = (
+    'DETECTION_COMMIT',
+    'DETECTION_TAG',
+    'DETECTION_VERSION',
+    'TYPE_CHECKSUM',
+    'TYPE_COMMIT',
+    'TYPE_DAVINCI',
+    'TYPE_DIRECTORY',
+    'TYPE_METADATA',
+    'TYPE_NONE',
+    'TYPE_REGEX',
+    'TYPE_REPOLOGY',
+    'LivecheckSettings',
+    'gather_settings',
+)
 
 log = logging.getLogger(__name__)
+DETECTION_COMMIT = 'commit'
+DETECTION_TAG = 'tag'
+DETECTION_VERSION = 'version'
 TYPE_CHECKSUM = 'checksum'
 TYPE_COMMIT = 'commit'
 TYPE_DAVINCI = 'davinci'
@@ -67,6 +83,7 @@ class LivecheckSettings:
     restrict_version: dict[str, str] = field(default_factory=dict)
     sync_version: dict[str, str] = field(default_factory=dict)
     stable_version: dict[str, str] = field(default_factory=dict)
+    detection_methods: dict[str, str] = field(default_factory=dict)
     # Settings from command line flag.
     auto_update_flag: bool = False
     debug_flag: bool = False
@@ -74,6 +91,7 @@ class LivecheckSettings:
     git_flag: bool = False
     keep_old_flag: bool = False
     progress_flag: bool = False
+    detection_method: str = DETECTION_VERSION
     # Internal settings.
     restrict_version_process: str = ''
 
@@ -124,6 +142,7 @@ def gather_settings(search_dir: Path) -> LivecheckSettings:  # noqa: C901, PLR09
     restrict_version: dict[str, str] = {}
     sync_version: dict[str, str] = {}
     stable_version: dict[str, str] = {}
+    detection_methods: dict[str, str] = {}
 
     for path in search_dir.glob('**/livecheck.json'):
         log.debug('Opening %s.', path)
@@ -259,13 +278,21 @@ def gather_settings(search_dir: Path) -> LivecheckSettings:  # noqa: C901, PLR09
             if 'stable_version' in settings_parsed:
                 check_instance(settings_parsed['stable_version'], 'stable_version', 'regex', path)
                 stable_version[catpkg] = settings_parsed['stable_version']
+            if 'detection_method' in settings_parsed:
+                check_instance(settings_parsed['detection_method'], 'detection_method', 'string',
+                               path)
+                detection_value = settings_parsed['detection_method'].lower()
+                if detection_value not in {DETECTION_TAG, DETECTION_VERSION, DETECTION_COMMIT}:
+                    log.error('Invalid "detection_method" in %s.', path)
+                    continue
+                detection_methods[catpkg] = detection_value
 
     return LivecheckSettings(
         branches, custom_livechecks, dotnet_projects, golang_packages, type_packages,
         no_auto_update, sha_sources, transformations, yarn_base_packages, yarn_packages,
         jetbrains_packages, keep_old, gomodule_packages, gomodule_path, nodejs_packages,
         nodejs_path, development, composer_packages, composer_path, maven_packages, maven_path,
-        regex_version, restrict_version, sync_version, stable_version)
+        regex_version, restrict_version, sync_version, stable_version, detection_methods)
 
 
 def check_instance(
