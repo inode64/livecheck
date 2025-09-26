@@ -32,6 +32,8 @@ SETTINGS_TYPES = {
     TYPE_REPOLOGY
 }
 
+NODEJS_MANAGERS = {'npm', 'yarn', 'pnpm'}
+
 
 @dataclass
 class LivecheckSettings:
@@ -74,6 +76,7 @@ class LivecheckSettings:
     git_flag: bool = False
     keep_old_flag: bool = False
     progress_flag: bool = False
+    nodejs_manager_flag: str = 'npm'
     # Internal settings.
     restrict_version_process: str = ''
 
@@ -87,9 +90,19 @@ class UnknownTransformationFunction(NameError):
         super().__init__(f'Unknown transformation function: {tfs}')
 
 
-def gather_settings(search_dir: Path) -> LivecheckSettings:  # noqa: C901, PLR0912, PLR0914, PLR0915
+def gather_settings(search_dir: Path,
+                    *,
+                    nodejs_manager: str = 'npm') -> LivecheckSettings:  # noqa: C901, PLR0912, PLR0914, PLR0915
     """
     Gather settings from ``livecheck.json`` files in the given directory.
+
+    Parameters
+    ----------
+    search_dir
+        Root directory to search for ``livecheck.json`` configuration files.
+    nodejs_manager
+        Preferred Node.js package manager to use when updating Node.js packages
+        programmatically. Must be one of ``npm``, ``yarn``, or ``pnpm``.
 
     Raises
     ------
@@ -260,12 +273,19 @@ def gather_settings(search_dir: Path) -> LivecheckSettings:  # noqa: C901, PLR09
                 check_instance(settings_parsed['stable_version'], 'stable_version', 'regex', path)
                 stable_version[catpkg] = settings_parsed['stable_version']
 
-    return LivecheckSettings(
+    settings = LivecheckSettings(
         branches, custom_livechecks, dotnet_projects, golang_packages, type_packages,
         no_auto_update, sha_sources, transformations, yarn_base_packages, yarn_packages,
         jetbrains_packages, keep_old, gomodule_packages, gomodule_path, nodejs_packages,
         nodejs_path, development, composer_packages, composer_path, maven_packages, maven_path,
         regex_version, restrict_version, sync_version, stable_version)
+
+    normalized_manager = nodejs_manager.lower()
+    if normalized_manager not in NODEJS_MANAGERS:
+        msg = f'Unsupported Node.js manager: {nodejs_manager}'
+        raise ValueError(msg)
+    settings.nodejs_manager_flag = normalized_manager
+    return settings
 
 
 def check_instance(

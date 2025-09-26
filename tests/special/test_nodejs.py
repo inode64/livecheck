@@ -67,6 +67,29 @@ def test_update_nodejs_ebuild_success(mocker: MockerFixture) -> None:
                                                 '-node_modules.tar.xz', fetchlist)
 
 
+def test_update_nodejs_ebuild_with_custom_manager(mocker: MockerFixture) -> None:
+    mock_search_ebuild = mocker.patch('livecheck.special.nodejs.search_ebuild')
+    mock_run = mocker.patch('livecheck.special.nodejs.sp.run')
+    mock_build_compress = mocker.patch('livecheck.special.nodejs.build_compress')
+
+    ebuild = 'dummy.ebuild'
+    path = '/some/path'
+    fetchlist = {'foo': ('bar',)}
+    package_path = '/tmp/pkg'
+    temp_dir = '/tmp/tmpdir'
+
+    mock_search_ebuild.return_value = (package_path, temp_dir)
+
+    update_nodejs_ebuild(ebuild, path, fetchlist, manager='yarn')
+
+    mock_run.assert_called_once_with(('yarn', 'install', '--ignore-scripts', '--non-interactive',
+                                      '--silent'),
+                                     cwd=package_path,
+                                     check=True)
+    mock_build_compress.assert_called_once_with(temp_dir, package_path, 'node_modules',
+                                                '-node_modules.tar.xz', fetchlist)
+
+
 def test_update_nodejs_ebuild_no_package_path(mocker: MockerFixture) -> None:
     mock_search_ebuild = mocker.patch('livecheck.special.nodejs.search_ebuild')
     mock_run = mocker.patch('livecheck.special.nodejs.sp.run')
@@ -121,3 +144,15 @@ def test_check_nodejs_requirements_failure(mocker: MockerFixture) -> None:
     mock_check_program.assert_called_once_with('npm', ['--version'])
     assert result is False
     mock_logger.error.assert_called_once_with('npm is not installed')
+
+
+def test_check_nodejs_requirements_custom_manager(mocker: MockerFixture) -> None:
+    mock_check_program = mocker.patch('livecheck.special.nodejs.check_program')
+    mock_logger = mocker.patch('livecheck.special.nodejs.logger')
+    mock_check_program.return_value = False
+
+    result = check_nodejs_requirements('pnpm')
+
+    mock_check_program.assert_called_once_with('pnpm', ['--version'])
+    assert result is False
+    mock_logger.error.assert_called_once_with('pnpm is not installed')

@@ -55,6 +55,7 @@ def test_livecheck_settings_defaults() -> None:
     assert s.git_flag is False
     assert s.keep_old_flag is False
     assert s.progress_flag is False
+    assert s.nodejs_manager_flag == 'npm'
     assert not s.restrict_version_process
 
 
@@ -116,6 +117,16 @@ def test_gather_settings_basic(tmp_path: Path) -> None:
     assert 'cat/pkg' in result.custom_livechecks
     assert result.custom_livechecks['cat/pkg'] == ('https://example.com', 'v([0-9.]+)')
     assert result.type_packages['cat/pkg'] == TYPE_REGEX
+
+
+def test_gather_settings_sets_nodejs_manager_flag(tmp_path: Path) -> None:
+    result = gather_settings(tmp_path, nodejs_manager='Yarn')
+    assert result.nodejs_manager_flag == 'yarn'
+
+
+def test_gather_settings_invalid_nodejs_manager(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        gather_settings(tmp_path, nodejs_manager='bun')
 
 
 def test_gather_settings_with_transformation_function(tmp_path: Path) -> None:

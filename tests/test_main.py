@@ -104,6 +104,7 @@ def mock_settings(mocker: MockerFixture) -> Any:
     settings.sync_version = {}
     settings.type_packages = {}
     settings.yarn_base_packages = set()
+    settings.nodejs_manager_flag = 'npm'
     return settings
 
 
@@ -655,7 +656,8 @@ def test_do_main_nodejs_packages(mocker: MockerFixture, tmp_path: Path,
             top_hash=top_hash,
             url=url)
     mock_update_nodejs_ebuild.assert_called_once_with(
-        f'{search_dir}/{cat}/{pkg}/{pkg}-{last_version}.ebuild', mocker.ANY, {})
+        f'{search_dir}/{cat}/{pkg}/{pkg}-{last_version}.ebuild', mocker.ANY, {},
+        mock_settings.nodejs_manager_flag)
     mock_write.assert_called_once_with('abcdef1', encoding='utf-8')
 
 
@@ -1493,6 +1495,7 @@ def mock_settings2(mocker: MockerFixture) -> Any:
     settings.custom_livechecks = {}
     settings.branches = {}
     settings.restrict_version_process = None
+    settings.nodejs_manager_flag = 'npm'
     return settings
 
 
