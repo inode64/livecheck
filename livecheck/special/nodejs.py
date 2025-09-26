@@ -17,7 +17,7 @@ __all__ = ('check_nodejs_requirements', 'remove_nodejs_url', 'update_nodejs_ebui
 logger = logging.getLogger(__name__)
 
 PACKAGE_MANAGER_COMMANDS: dict[str, tuple[str, ...]] = {
-    'npm': ('npm', 'install', '--audit false', '--color false', '--progress false',
+    'npm': ('npm', 'install', '--no-audit', '--no-color', '--no-progress',
             '--ignore-scripts'),
     'yarn': ('yarn', 'install', '--ignore-scripts', '--silent', '--non-interactive'),
     'pnpm': ('pnpm', 'install', '--ignore-scripts', '--silent', '--color=false'),
