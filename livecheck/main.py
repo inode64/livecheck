@@ -20,6 +20,9 @@ from .constants import (
     TAG_NAME_FUNCTIONS,
 )
 from .settings import (
+    DETECTION_COMMIT,
+    DETECTION_TAG,
+    DETECTION_VERSION,
     TYPE_CHECKSUM,
     TYPE_COMMIT,
     TYPE_DAVINCI,
@@ -156,6 +159,21 @@ def log_unhandled_pkg(ebuild: str, src_uri: str) -> None:  # pragma: no cover
     log.debug('Unhandled: %s, SRC_URI: %s', ebuild, src_uri)
 
 
+def should_force_sha(force_sha: bool, detection_method: str) -> bool:
+    """Determine if SHA comparison should be forced for the current settings."""
+    return force_sha or detection_method == DETECTION_COMMIT
+
+
+def apply_detection_preferences(last_version: str, top_hash: str,
+                                detection_method: str) -> tuple[str, str]:
+    """Adjust detection results based on the configured detection method."""
+    if detection_method == DETECTION_COMMIT:
+        return '', top_hash
+    if detection_method == DETECTION_TAG:
+        return last_version, ''
+    return last_version, top_hash
+
+
 def parse_url(src_uri: str, ebuild: str, settings: LivecheckSettings, *,
               force_sha: bool) -> tuple[str, str, str, str]:
     """Parse a URL and return the last version, top hash, hash date, and URL."""
@@ -206,6 +224,18 @@ def parse_url(src_uri: str, ebuild: str, settings: LivecheckSettings, *,
     else:
         log_unhandled_pkg(ebuild, src_uri)
 
+    return last_version, top_hash, hash_date, url
+
+
+def parse_url_with_preferences(src_uri: str, ebuild: str, settings: LivecheckSettings,
+                               detection_method: str, *, force_sha: bool) -> tuple[str, str, str, str]:
+    """Parse a URL applying detection preferences."""
+    last_version, top_hash, hash_date, url = parse_url(src_uri,
+                                                       ebuild,
+                                                       settings,
+                                                       force_sha=should_force_sha(force_sha,
+                                                                                 detection_method))
+    last_version, top_hash = apply_detection_preferences(last_version, top_hash, detection_method)
     return last_version, top_hash, hash_date, url
 
 
@@ -309,6 +339,7 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
             egit = egit + '/commit/' + old_sha
         if branch:
             settings.branches[catpkg] = branch
+        detection_method = settings.detection_methods.get(catpkg, settings.detection_method)
         if catpkg in settings.sync_version:
             matches_sync = get_highest_matches([settings.sync_version[catpkg]], None, settings)
             if not matches_sync:
@@ -321,6 +352,8 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
             last_version = get_latest_davinci_package(pkg)
         elif settings.type_packages.get(catpkg) == TYPE_METADATA:
             last_version, top_hash, hash_date, url = parse_metadata(str(repo_root), match, settings)
+            last_version, top_hash = apply_detection_preferences(last_version, top_hash,
+                                                                 detection_method)
         elif settings.type_packages.get(catpkg) == TYPE_DIRECTORY:
             url, _ = settings.custom_livechecks[catpkg]
             last_version, url = get_latest_directory_package(url, match, settings)
@@ -334,47 +367,68 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
             last_version, hash_date, url = get_latest_checksum_package(
                 src_uri, match, str(repo_root))
         elif settings.type_packages.get(catpkg) == TYPE_COMMIT:
-            last_version, top_hash, hash_date, url = parse_url(egit,
-                                                               match,
-                                                               settings,
-                                                               force_sha=True)
+            detection_method = DETECTION_COMMIT
+            last_version, top_hash, hash_date, url = parse_url_with_preferences(
+                egit,
+                match,
+                settings,
+                detection_method,
+                force_sha=True,
+            )
         else:
             if egit:
-                last_version, top_hash, hash_date, url = parse_url(egit,
-                                                                   match,
-                                                                   settings,
-                                                                   force_sha=True)
+                last_version, top_hash, hash_date, url = parse_url_with_preferences(
+                    egit,
+                    match,
+                    settings,
+                    detection_method,
+                    force_sha=True,
+                )
             if not last_version and not top_hash:
-                last_version, top_hash, hash_date, url = parse_url(src_uri,
-                                                                   match,
-                                                                   settings,
-                                                                   force_sha=False)
-            if not last_version and not top_hash:
+                last_version, top_hash, hash_date, url = parse_url_with_preferences(
+                    src_uri,
+                    match,
+                    settings,
+                    detection_method,
+                    force_sha=False,
+                )
+            if detection_method == DETECTION_VERSION and not last_version and not top_hash:
                 last_version, top_hash, hash_date, url = parse_metadata(
                     str(repo_root), match, settings)
+                last_version, top_hash = apply_detection_preferences(last_version, top_hash,
+                                                                     detection_method)
             # Try check for homepage
             homes = [
                 x
                 for x in ' '.join(P.aux_get(match, ['HOMEPAGE'], mytree=str(repo_root))).split(' ')
                 if x
             ]
-            for home in homes:
-                if not last_version and not top_hash:
-                    last_version, top_hash, hash_date, url = parse_url(home,
-                                                                       match,
-                                                                       settings,
-                                                                       force_sha=False)
-            if not last_version and not top_hash:
+            if detection_method == DETECTION_VERSION:
+                for home in homes:
+                    if not last_version and not top_hash:
+                        last_version, top_hash, hash_date, url = parse_url_with_preferences(
+                            home,
+                            match,
+                            settings,
+                            detection_method,
+                            force_sha=False,
+                        )
+            if detection_method == DETECTION_VERSION and not last_version and not top_hash:
                 last_version = get_latest_repology(match, settings)
             # Only check directory if no other method was found
-            if not last_version and not top_hash:
+            if detection_method == DETECTION_VERSION and not last_version and not top_hash:
                 last_version, url = get_latest_directory_package(src_uri, match, settings)
                 for home in homes:
                     last_version, url = get_latest_directory_package(home, match, settings)
                     if last_version:
                         break
 
+        if detection_method == DETECTION_COMMIT and not top_hash:
+            log.debug('Ignoring %s. No commit hash available for commit detection.', catpkg)
+            continue
         if last_version or top_hash:
+            if detection_method == DETECTION_TAG:
+                top_hash = ''
             log.debug('Inserting %s: %s -> %s : %s', catpkg, ebuild_version, last_version, top_hash)
             yield (cat, pkg, ebuild_version, last_version, top_hash, hash_date, url)
         else:
@@ -615,6 +669,13 @@ def do_main(  # noqa: C901, PLR0912, PLR0915
               default=None,
               help='Run a hook directory scripts with various parameters.',
               type=click.Path(file_okay=False, exists=True, resolve_path=True, path_type=Path))
+@click.option('-m',
+              '--detection-method',
+              default=DETECTION_VERSION,
+              show_default=True,
+              type=click.Choice([DETECTION_TAG, DETECTION_VERSION, DETECTION_COMMIT],
+                                case_sensitive=False),
+              help='Method to detect a new version (tag, version or commit hash).')
 @click.option('-k', '--keep-old', is_flag=True, help='Keep old ebuild versions.')
 @click.option('-p', '--progress', is_flag=True, help='Enable progress logging.')
 @click.option('-W',
@@ -632,6 +693,7 @@ def main(working_dir: Path,
          hook_dir: Path | None = None,
          package_names: tuple[str, ...] | list[str] | None = None,
          *,
+         detection_method: str = DETECTION_VERSION,
          auto_update: bool = False,
          debug: bool = False,
          development: bool = False,
@@ -679,6 +741,7 @@ def main(working_dir: Path,
 
     # update flags in settings
     settings.auto_update_flag = auto_update
+    settings.detection_method = detection_method.lower()
     settings.debug_flag = debug
     settings.development_flag = development
     settings.git_flag = git

@@ -60,6 +60,8 @@ Options:
   -e, --exclude TEXT           Exclude package(s) from updates.
   -g, --git                    Use git and pkgdev to make changes.
   -H, --hook-dir               Run a hook directory scripts with various parameters.
+  -m, --detection-method [tag|version|commit]
+                               Method to detect a new version (tag, version or commit hash).
   -k, --keep-old               Keep old ebuild versions.
   -p, --progress               Enable progress logging.
   -W, --working-dir DIRECTORY  Working directory. Should be a port tree root.
@@ -123,6 +125,7 @@ action directory there can be several scripts that are executed in order of name
 - `gomodule_path` - path - Where is 'go.mod' located (need gomodule_packages).
 - `jetbrains_packages` - boolean - Update internal ID.
 - `keep_old` - boolean - Keep old ebuild versions.
+- `detection_method` - string - Override detection mode for this package (`tag`, `version`, or `commit`).
 - `no_auto_update` - boolean - Do not allow auto-updating of this package.
 - `nodejs_packages` - boolean - Download nodejs node_modules.
 - `nodejs_path` - path - Where is 'package.json' located (need nodejs_packages).
