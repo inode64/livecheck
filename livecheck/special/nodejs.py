@@ -24,12 +24,12 @@ def remove_nodejs_url(ebuild_content: str) -> str:
 
 def get_nodejs_install_command(manager: str) -> tuple[str, ...]:
     """Return the command tuple to install dependencies."""
-    manager_normalized = manager.lower()
-    if manager_normalized == 'yarn':
-        return ('yarn', 'install', '--ignore-scripts', '--non-interactive', '--silent')
-    if manager_normalized == 'pnpm':
-        return ('pnpm', 'install', '--ignore-scripts', '--silent')
-    return ('npm', 'install', '--audit false', '--color false', '--progress false', '--ignore-scripts')
+    commands = {
+        'npm': ('npm', 'install', '--audit=false', '--color=false', '--progress=false', '--ignore-scripts'),
+        'yarn': ('yarn', 'install', '--ignore-scripts', '--non-interactive', '--silent'),
+        'pnpm': ('pnpm', 'install', '--ignore-scripts', '--silent'),
+    }
+    return commands.get(manager.lower(), commands['npm'])
 
 
 def update_nodejs_ebuild(ebuild: str, path: str | None,
