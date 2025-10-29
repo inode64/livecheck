@@ -272,3 +272,15 @@ def test_is_sha_non_hex_sha() -> None:
     sha = 'zzzzzzz'
     url = f'https://example.com/commit/{sha}'
     assert is_sha(url) == 0
+
+
+def test_is_sha_sha_with_trailing_characters() -> None:
+    sha = 'abcdef1'
+    url = f'https://example.com/commit/{sha}extra'
+    assert is_sha(url) == 0
+
+
+def test_is_sha_full_sha_with_trailing_characters() -> None:
+    sha = 'a' * 40
+    url = f'https://example.com/commit/{sha}extra'
+    assert is_sha(url) == 0
