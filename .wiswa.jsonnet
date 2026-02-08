@@ -32,6 +32,7 @@ local utils = import 'utils.libjsonnet';
           defusedxml: utils.latestPypiPackageVersionCaret('defusedxml'),
           html5lib: utils.latestPypiPackageVersionCaret('html5lib'),
           keyring: utils.latestPypiPackageVersionCaret('keyring'),
+          portage: utils.latestPypiPackageVersionCaret('portage'),
           platformdirs: utils.latestPypiPackageVersionCaret('platformdirs'),
           requests: utils.latestPypiPackageVersionCaret('requests'),
         },

@@ -48,7 +48,6 @@ jobs:
               fi
               cat > recipe/requirements.txt <<EOF
           $(pwd -P)
-          git+https://github.com/gentoo/portage.git
           EOF
               if [[ "${ACTIONS_RUNNER_DEBUG}" == 'true' ]]; then
                   cat recipe/requirements.txt

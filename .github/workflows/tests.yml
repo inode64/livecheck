@@ -16,8 +16,6 @@ jobs:
         run: 'poetry install --with=tests'
       - name: 'Install pytest-action dependencies'
         run: 'poetry run pip install pytest-md pytest-emoji'
-      - name: 'Install portage'
-        run: 'poetry run pip install git+https://github.com/gentoo/portage.git'
       - name: 'Install dependencies (Yarn)'
         run: 'yarn'
       - name: 'Run tests'
