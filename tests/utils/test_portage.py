@@ -33,59 +33,69 @@ if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
 
-@pytest.mark.parametrize(('version', 'expected'), [
-    (0, '0'),
-    ('', ''),
-    ('v1.2.3', '1.2.3'),
-    ('s1.2.3', '1.2.3'),
-    ('1.2.3', '1.2.3'),
-    ('1.2.3a', '1.2.3a'),
-    ('1.2.3-alpha', '1.2.3_alpha'),
-    ('1.2.3-alpha0', '1.2.3_alpha'),
-    ('1.2.3-beta1', '1.2.3_beta1'),
-    ('1.2.3-beta.1', '1.2.3_beta1'),
-    ('1.2.3-rc2', '1.2.3_rc2'),
-    ('1.2.3_rc2', '1.2.3_rc2'),
-    ('1.2.3 RC 2', '1.2.3_rc2'),
-    ('1.2.3-pre', '1.2.3_pre'),
-    ('1.2.3-dev', '1.2.3_beta'),
-    ('1.2.3-test', '1.2.3_beta'),
-    ('1.2.3_test', '1.2.3_beta'),
-    ('1.2.3_test 1', '1.2.3_beta1'),
-    ('1.2.3p', '1.2.3_p'),
-    ('1.2.3-unknown', '1.2.3'),
-    ('1.2.3-unknown1', '1.2.31'),
-    ('1.2.3-1', '1.2.3.1'),
-    ('1.2.3_1', '1.2.3.1'),
-    ('1.2.3 1', '1.2.3.1'),
-    ('1.2.3-rc', '1.2.3_rc'),
-    ('1.2.3-rc-1', '1.2.3_rc1'),
-    ('2022.12.26 2022-12-26 19:55', '2022.12.26'),
-    ('2022_12_26 2022-12-26 19:55', '2022.12.26'),
-    ('2022-12-26 2022-12-26 19:55', '2022.12.26'),
-    ('dosbox 2022-12-26 2022-12-26 19:55', '2022.12.26'),
-    ('samba-4.19.7', '4.19.7'),
-    ('test-190', '190'),
-    ('test 190', '190'),
-    ('318.1', '318.1'),
-    ('1.2.0.4068', '1.2.0.4068'),
-    ('v2015-09-29-license-adobe', '2015.9.29'),
-    ('dosbox-x-v2025.01.01', '2025.1.1'),
-    ('v0.8.9p10', '0.8.9_p10'),
-    ('build_420', '420'),
-    ('glabels', ''),
-    ('NewBuild25rc1', '25_rc1'),
-    ('v1.12.post318', '1.12_p318'),
-    ('1.002', '1.002'),
-    ('1.3.0-build.4', '1.3.0'),
-    ('0.2.tar.gz', '0.2'),
-    ('0.8.1-pl5', '0.8.1_p5'),
-    ('0.8 patchlevel   6', '0.8_p6'),
-    ('0.0.8b2', '0.0.8_beta2'),
-    ('0.0.8a5', '0.0.8_alpha5'),
-    ('0.1.8b0', '0.1.8_beta'),
-    ('1.4.1-build.2', '1.4.1'),
-])
+@pytest.mark.parametrize(
+    ('version', 'expected'),
+    [
+        (0, '0'),
+        ('', ''),
+        ('v1.2.3', '1.2.3'),
+        ('s1.2.3', '1.2.3'),
+        ('1.2.3', '1.2.3'),
+        ('1.2.3a', '1.2.3a'),
+        ('1.2.3-alpha', '1.2.3_alpha'),
+        ('1.2.3-alpha0', '1.2.3_alpha'),
+        ('1.2.3-beta1', '1.2.3_beta1'),
+        ('1.2.3-beta.1', '1.2.3_beta1'),
+        ('1.2.3-rc2', '1.2.3_rc2'),
+        ('1.2.3_rc2', '1.2.3_rc2'),
+        ('1.2.3 RC 2', '1.2.3_rc2'),
+        ('1.2.3-pre', '1.2.3_pre'),
+        ('1.2.3-dev', '1.2.3_beta'),
+        ('1.2.3-test', '1.2.3_beta'),
+        ('1.2.3_test', '1.2.3_beta'),
+        ('1.2.3_test 1', '1.2.3_beta1'),
+        ('1.2.3p', '1.2.3_p'),
+        ('1.2.3-unknown', '1.2.3'),
+        ('1.2.3-unknown1', '1.2.31'),
+        ('1.2.3-1', '1.2.3.1'),
+        ('1.2.3_1', '1.2.3.1'),
+        ('1.2.3 1', '1.2.3.1'),
+        ('1.2.3-rc', '1.2.3_rc'),
+        ('1.2.3-rc-1', '1.2.3_rc1'),
+        ('2022.12.26 2022-12-26 19:55', '2022.12.26'),
+        ('2022_12_26 2022-12-26 19:55', '2022.12.26'),
+        ('2022-12-26 2022-12-26 19:55', '2022.12.26'),
+        ('dosbox 2022-12-26 2022-12-26 19:55', '2022.12.26'),
+        ('samba-4.19.7', '4.19.7'),
+        ('test-190', '190'),
+        ('test 190', '190'),
+        ('318.1', '318.1'),
+        ('1.2.0.4068', '1.2.0.4068'),
+        ('v2015-09-29-license-adobe', '2015.9.29'),
+        ('dosbox-x-v2025.01.01', '2025.1.1'),
+        ('v0.8.9p10', '0.8.9_p10'),
+        ('build_420', '420'),
+        ('glabels', ''),
+        ('NewBuild25rc1', '25_rc1'),
+        ('v1.12.post318', '1.12_p318'),
+        ('1.002', '1.002'),
+        ('1.3.0-build.4', '1.3.0'),
+        ('0.2.tar.gz', '0.2'),
+        ('0.8.1-pl5', '0.8.1_p5'),
+        ('0.8 patchlevel   6', '0.8_p6'),
+        ('0.0.8b2', '0.0.8_beta2'),
+        ('0.0.8a5', '0.0.8_alpha5'),
+        ('0.1.8b0', '0.1.8_beta'),
+        ('1.4.1-build.2', '1.4.1'),
+        # VapourSynth: filter tags with long unrecognized suffixes (test/dev tags)
+        ('R71-limited-api-test1', ''),
+        ('R73', '73'),
+        ('R73-RC1', '73_rc1'),
+        # rpcs3: filter vcpkg dependency tags
+        ('vcpkg-v1.0', ''),
+        ('vcpkg-prebuilt-v1.0', ''),
+        ('v0.0.39', '0.0.39'),
+    ])
 def test_sanitize_version(version: str, expected: str) -> None:
     assert sanitize_version(version) == expected
 
@@ -123,8 +133,13 @@ def test_mask_version(cp: str, version: str, restrict_version: str | None, expec
 
 def test_get_highest_matches_basic(mocker: MockerFixture) -> None:
     mock_p = mocker.patch('livecheck.utils.portage.P')
-    mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit',
-                 side_effect=lambda _: ('cat/pkg', 'cat', 'pkg', '1.2.3'))
+
+    def catpkg_side_effect(atom: str) -> tuple[str, str, str, str]:
+        if 'cat/pkg-1.2.3' in atom:
+            return ('cat/pkg', 'cat', 'pkg', '1.2.3')
+        return ('cat/pkg', 'cat', 'pkg', '1.2.2')
+
+    mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit', side_effect=catpkg_side_effect)
     mock_p.xmatch.return_value = ['cat/pkg-1.2.3', 'cat/pkg-1.2.2']
     mock_p.findname2.return_value = ('cat/pkg-1.2.3', '/repo/root')
 
@@ -186,6 +201,87 @@ def test_get_highest_matches_ignores_9999(mocker: MockerFixture) -> None:
     dummy_settings = mocker.Mock()
     result = get_highest_matches(names, repo_root, dummy_settings)
     assert result == []
+
+
+def test_get_highest_matches_single_version_excluded(mocker: MockerFixture) -> None:
+    """Test that packages with only one version are excluded."""
+    mock_p = mocker.patch('livecheck.utils.portage.P')
+    mock_p.xmatch.return_value = ['cat/pkg-1.2.3']
+    mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit',
+                 return_value=('cat/pkg', 'cat', 'pkg', '1.2.3'))
+    mock_p.findname2.return_value = ('cat/pkg-1.2.3', '/repo/root')
+    names = ['cat/pkg']
+    repo_root = Path('/repo/root')
+    dummy_settings = mocker.Mock()
+    dummy_settings.restrict_version = {}
+    result = get_highest_matches(names, repo_root, dummy_settings)
+    assert result == []
+
+
+def test_get_highest_matches_9999_not_counted(mocker: MockerFixture) -> None:
+    """Test that 9999 versions don't count toward the version count."""
+    mock_p = mocker.patch('livecheck.utils.portage.P')
+    mock_p.xmatch.return_value = ['cat/pkg-1.2.3', 'cat/pkg-9999']
+
+    def catpkg_side_effect(atom: str) -> tuple[str, str, str, str]:
+        if '9999' in atom:
+            return ('cat/pkg', 'cat', 'pkg', '9999')
+        return ('cat/pkg', 'cat', 'pkg', '1.2.3')
+
+    mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit', side_effect=catpkg_side_effect)
+    mock_p.findname2.return_value = ('cat/pkg-1.2.3', '/repo/root')
+    names = ['cat/pkg']
+    repo_root = Path('/repo/root')
+    dummy_settings = mocker.Mock()
+    dummy_settings.restrict_version = {}
+    result = get_highest_matches(names, repo_root, dummy_settings)
+    # Should be empty because only 1 non-9999 version exists
+    assert result == []
+
+
+def test_get_highest_matches_multiple_versions_included(mocker: MockerFixture) -> None:
+    """Test that packages with 2+ versions are included."""
+    mock_p = mocker.patch('livecheck.utils.portage.P')
+    mock_p.xmatch.return_value = ['cat/pkg-1.2.3', 'cat/pkg-1.2.2', 'cat/pkg-1.2.1']
+
+    def catpkg_side_effect(atom: str) -> tuple[str, str, str, str]:
+        if '1.2.3' in atom:
+            return ('cat/pkg', 'cat', 'pkg', '1.2.3')
+        if '1.2.2' in atom:
+            return ('cat/pkg', 'cat', 'pkg', '1.2.2')
+        return ('cat/pkg', 'cat', 'pkg', '1.2.1')
+
+    mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit', side_effect=catpkg_side_effect)
+    mock_p.findname2.return_value = ('cat/pkg-1.2.3', '/repo/root')
+    names = ['cat/pkg']
+    repo_root = Path('/repo/root')
+    dummy_settings = mocker.Mock()
+    dummy_settings.restrict_version = {}
+    result = get_highest_matches(names, repo_root, dummy_settings)
+    assert result == ['cat/pkg-1.2.3']
+
+
+def test_get_highest_matches_with_9999_and_multiple_versions(mocker: MockerFixture) -> None:
+    """Test package with multiple non-9999 versions and a 9999 version."""
+    mock_p = mocker.patch('livecheck.utils.portage.P')
+    mock_p.xmatch.return_value = ['cat/pkg-1.2.3', 'cat/pkg-1.2.2', 'cat/pkg-9999']
+
+    def catpkg_side_effect(atom: str) -> tuple[str, str, str, str]:
+        if '9999' in atom:
+            return ('cat/pkg', 'cat', 'pkg', '9999')
+        if '1.2.3' in atom:
+            return ('cat/pkg', 'cat', 'pkg', '1.2.3')
+        return ('cat/pkg', 'cat', 'pkg', '1.2.2')
+
+    mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit', side_effect=catpkg_side_effect)
+    mock_p.findname2.return_value = ('cat/pkg-1.2.3', '/repo/root')
+    names = ['cat/pkg']
+    repo_root = Path('/repo/root')
+    dummy_settings = mocker.Mock()
+    dummy_settings.restrict_version = {}
+    result = get_highest_matches(names, repo_root, dummy_settings)
+    # Should include the package because there are 2 non-9999 versions
+    assert result == ['cat/pkg-1.2.3']
 
 
 def test_catpkgsplit2_valid_atom(mocker: MockerFixture) -> None:
