@@ -32,17 +32,13 @@ and [nvchecker](https://github.com/lilydjwg/nvchecker).
 
 ## Internal workings
 
-The script uses the first url of the ebuild using the SRC_URI variable to search for new versions,
-using logic for github, PyPI, PECL or if it is configured in the livecheck.json file within the
-same package directory.
-Then if you do not find a new version, try to use the repositories within the metadata.xml file
-That is why it is important to have the first download url well defined and thus automatically
-update the ebuild.
+The script uses the first URL of the ebuild using the `SRC_URI` variable to search for new versions,
+using logic for github, PyPI, PECL or if it is configured in the `livecheck.json` file within the
+same package directory. The ebuild is automatically updated if `--auto-update` is passed.
 
-It is recommended to activate the oauth_token of both github and gitlab to avoid
-Rate Limiting problems for the REST API.
-Use your secret storage to store `github.com` or `gitlab.com` tokens with the `livecheck` user.
-See [keyring](https://github.com/jaraco/keyring) to manage tokens.
+It is recommended to use OAuth tokens for both Github and GitLab to avoid rate limiting problems
+with the REST API. Use your secret storage to store `github.com` or `gitlab.com` tokens with the
+`livecheck` user. See [keyring](https://github.com/jaraco/keyring) to manage tokens.
 
 ## Installation
 
@@ -80,44 +76,29 @@ This package can do automated lookups based on commonly used hosts. Currently:
 
 - Bitbucket
 - Davinci products
-- GitHub archives
-- GitHub commit hashes
-- GitHub releases
-- Gitlab releases
+- Github archives
+- Github commit hashes
+- Github releases
+- GitLab releases
+- Hex-Rays for IDA Free
 - JetBrains products
 - PECL
-- Packages from Yarnpkg and Npmjs
+- Packages from Yarn and NPM
 - Perl CPAN
 - PyPI
 - Raphnet
 - Repology
 - RubyGems
-- Search in a url directory
 - SourceHut releases / commit hashes
-- Sourceforge
+- SourceForge
 
 This works as long as the version system is usable with Portage's version
 comparison function. For anything else, see [Package configuration](#package-configuration).
 
 ## Package configuration
 
-For packages that will not work with currently heuristic checking, a configuration file named
-`livecheck.json` can be placed in the directory alongside the ebuild.
-
-## Hook directory
-
-The hooks directory structure is subdivided into actions, currently `post` and `pre`, within each
-action directory there can be several scripts that are executed in order of name.
-
-## Hook arguments
-
-- Root portage directory, e.g. `/var/db/repos/gentoo`.
-- Category and package name, e.g. `dev-lang/php`.
-- Previous version, e.g. `8.2.32-r2`.
-- New version, e.g. `8.2.33`.
-- SHA hash of the old version. Optional.
-- SHA hash of the new version. Optional.
-- Date associated with the hash. Optional.
+For packages that will not work with heuristic checking, a configuration file named `livecheck.json`
+can be placed in the directory alongside the ebuild.
 
 ### Configuration keys
 
@@ -141,32 +122,47 @@ action directory there can be several scripts that are executed in order of name
 - `sync_version` - string - Category and ebuild with version to sync.
 - `transformation_function` - string - Function to use to transform the version string.
   Currently only `dotize` is supported. Others are for internal use.
-- `type` - string - Only one `none`, `davinci`, `regex`, `directory`, `commit`,
-  `repology` or `checksum`.
+- `type` - string - Only one `none`, `davinci`, `regex`, `directory`, `commit`, `repology` or
+  `checksum`.
 
-Use the pattern to adjust the version using a regular expression
+Use the pattern to adjust the version using a regular expression:
 
-- `pattern_version` - string - The pattern string
-- `replace_version` - string - The replace string
+- `pattern_version` - string - The pattern string.
+- `replace_version` - string - The replacement string.
 
 Only then `type` is `regex` or `directory`
 
-- `url` - URL of the document to run regular expressions against. Required
+- `url` - URL of the document to run regular expressions against. Required.
 
 Only then `type` is `regex`
 
-- `regex` - string - The regular expression to use. Required
+- `regex` - string - The regular expression to use. Required.
 
 Only then `type` is `repology`
 
-- `package` - string - The package to search in repology. Required
+- `package` - string - The package to search in repology. Required.
+
+## Hook directory
+
+The hooks directory structure is subdivided into actions, currently `post` and `pre`. Within each
+action directory there can be several scripts that are executed in order by name.
+
+### Arguments
+
+- Root portage directory, e.g. `/var/db/repos/gentoo`.
+- Category and package name, e.g. `dev-lang/php`.
+- Previous version, e.g. `8.2.32-r2`.
+- New version, e.g. `8.2.33`.
+- SHA hash of the old version. Optional.
+- SHA hash of the new version. Optional.
+- Date associated with the hash. Optional.
 
 ## Development use
 
 ### Creating new downloads
 
-There are 2 types of downloads: _file_ and _latest commit_ (currently only Git is supported) and this
-is evident from the first download URL of the ebuild itself.
+There are 2 types of downloads: _file_ and _latest commit_ (currently only Git is supported) and
+this is evident from the first download URL of the ebuild itself.
 
 - To download a file, a search is performed by version/tag, and optionally you can include the
   commit of said version, including all the results in a list so that the highest one can be
@@ -183,8 +179,7 @@ located. Use `python -m livecheck` instead of `livecheck` to execute commands.
 
 ### With a virtualenv
 
-Run `poetry install --all-extras --with=dev,docs,tests` to set up a virtualenv. You must also add
-Portage to this virtualenv manually.
+Run `poetry install --all-extras --with=dev,docs,tests` to set up a virtualenv.
 
 Fully copy `/etc/portage` to the root of your virtualenv. Then you must fix `make.profile`. Also
 consider making changes in `repos.conf` if necessary.
@@ -193,7 +188,6 @@ Example:
 
 ```shell
 eval "$(poetry env activate)"
-pip install git+https://github.com/gentoo/portage.git
 pip install keyrings-alt
 cp -R /etc/portage "${VIRTUAL_ENV}/etc/"
 ln -sf "$(readlink -f /etc/portage/make.profile)" "${VIRTUAL_ENV}/etc/portage/make.profile"
