@@ -215,6 +215,30 @@ def parse_url(src_uri: str, ebuild: str, settings: LivecheckSettings, *,
     return last_version, top_hash, hash_date, url
 
 
+def choose_best_candidate(
+        candidates: list[tuple[str, str, str, str]]) -> tuple[str, str, str, str]:
+    """Select the best candidate from a list of potential updates."""
+    if not candidates:
+        return '', '', '', ''
+
+    commit_candidates = [candidate for candidate in candidates if candidate[1]]
+    if commit_candidates:
+        return max(commit_candidates, key=lambda candidate: candidate[2])
+
+    version_candidates = [candidate for candidate in candidates if candidate[0]]
+    if not version_candidates:
+        return '', '', '', ''
+
+    best_candidate = version_candidates[0]
+    best_version = best_candidate[0]
+    for candidate in version_candidates[1:]:
+        if compare_versions(best_version, candidate[0]):
+            best_candidate = candidate
+            best_version = candidate[0]
+
+    return best_candidate
+
+
 def parse_metadata(repo_root: str, ebuild: str,
                    settings: LivecheckSettings) -> tuple[str, str, str, str]:
     """Parse ``metadata.xml`` for upstream information."""
@@ -362,40 +386,41 @@ def get_props(  # noqa: C901, PLR0912, PLR0914
                                                                settings,
                                                                force_sha=True)
         else:
+            candidates: list[tuple[str, str, str, str]] = []
+
+            def add_candidate(candidate: tuple[str, str, str, str]) -> None:
+                if candidate[0] or candidate[1]:
+                    candidates.append(candidate)
+
             if egit:
-                last_version, top_hash, hash_date, url = parse_url(egit,
-                                                                   match,
-                                                                   settings,
-                                                                   force_sha=True)
-            if not last_version and not top_hash:
-                last_version, top_hash, hash_date, url = parse_url(src_uri,
-                                                                   match,
-                                                                   settings,
-                                                                   force_sha=False)
-            if not last_version and not top_hash:
-                last_version, top_hash, hash_date, url = parse_metadata(
-                    str(repo_root), match, settings)
-            # Try check for homepage
+                add_candidate(parse_url(egit, match, settings, force_sha=True))
+
+            add_candidate(parse_url(src_uri, match, settings, force_sha=False))
+
+            add_candidate(parse_metadata(str(repo_root), match, settings))
+
             homes = [
                 x
                 for x in ' '.join(P.aux_get(match, ['HOMEPAGE'], mytree=str(repo_root))).split(' ')
                 if x
             ]
+
             for home in homes:
-                if not last_version and not top_hash:
-                    last_version, top_hash, hash_date, url = parse_url(home,
-                                                                       match,
-                                                                       settings,
-                                                                       force_sha=False)
-            if not last_version and not top_hash:
-                last_version = get_latest_repology(match, settings)
-            # Only check directory if no other method was found
-            if not last_version and not top_hash:
-                last_version, url = get_latest_directory_package(src_uri, match, settings)
-                for home in homes:
-                    last_version, url = get_latest_directory_package(home, match, settings)
-                    if last_version:
-                        break
+                add_candidate(parse_url(home, match, settings, force_sha=False))
+
+            if last_version_repology := get_latest_repology(match, settings):
+                candidates.append((last_version_repology, '', '', ''))
+
+            directory_version, directory_url = get_latest_directory_package(src_uri, match, settings)
+            add_candidate((directory_version, '', '', directory_url))
+
+            for home in homes:
+                home_directory_version, home_directory_url = get_latest_directory_package(home,
+                                                                                         match,
+                                                                                         settings)
+                add_candidate((home_directory_version, '', '', home_directory_url))
+
+            last_version, top_hash, hash_date, url = choose_best_candidate(candidates)
 
         if last_version or top_hash:
             log.debug('Inserting %s: %s -> %s : %s', catpkg, ebuild_version, last_version, top_hash)
