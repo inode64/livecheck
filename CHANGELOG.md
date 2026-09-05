@@ -10,6 +10,11 @@ and this project adheres to
 
 ## [unreleased]
 
+### Added
+
+- Add the `nodejs_omit_dev` package setting. When enabled, the `node_modules` archive is built with
+  the runtime dependencies only, so it is only suitable for ebuilds that do not run a build step.
+
 ## [0.2.7] - 2026-09-04
 
 ### Fixed

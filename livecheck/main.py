@@ -1065,6 +1065,7 @@ async def do_main(  # ruff:ignore[complex-structure, too-many-branches, too-many
                                            settings.nodejs_path[cp],
                                            fetchlist,
                                            settings.get_package_manager(cp),
+                                           omit_dev=settings.omit_dev_dependencies(cp),
                                            dist_settings=dist_settings)
             if cp in settings.gomodule_packages:
                 await update_gomodule_ebuild(new_filename,

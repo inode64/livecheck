@@ -159,6 +159,8 @@ can be placed in the directory alongside the ebuild.
 - `nodejs_path` - path - Where is 'package.json' located (need nodejs_packages).
 - `nodejs_package_manager` - string - Package manager to use for Node.js packages [npm|pnpm|yarn]
   (defaults to npm)
+- `nodejs_omit_dev` - boolean - Leave the development dependencies out of the `node_modules`
+  archive (need nodejs_packages). Only for ebuilds that do not run a build step.
 - `sha_source`- string - Url to get the sha value.
 - `stable_version`- string - Regular expression to determine if it is a stable version.
 - `sync_version` - string - Category and ebuild with version to sync.

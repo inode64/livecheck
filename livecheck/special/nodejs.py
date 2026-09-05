@@ -23,6 +23,11 @@ PACKAGE_MANAGER_COMMANDS: dict[str, tuple[str, ...]] = {
     'yarn': ('yarn', 'install', '--silent'),
     'pnpm': ('pnpm', 'install', '--ignore-scripts', '--silent')
 }
+PACKAGE_MANAGER_OMIT_DEV_FLAGS: dict[str, tuple[str, ...]] = {
+    'npm': ('--omit=dev',),
+    'yarn': ('--production',),
+    'pnpm': ('--prod',)
+}
 
 
 def remove_nodejs_url(ebuild_content: str) -> str:
@@ -42,6 +47,7 @@ async def update_nodejs_ebuild(ebuild: str,
                                fetchlist: Mapping[str, tuple[str, ...]],
                                package_manager: str = 'npm',
                                *,
+                               omit_dev: bool = False,
                                dist_settings: DistGitHubSettings | None = None) -> None:
     """
     Update a NodeJS-based ebuild.
@@ -56,6 +62,9 @@ async def update_nodejs_ebuild(ebuild: str,
         Fetch map used when compressing the ``node_modules`` output.
     package_manager : str
         Package manager command to use (``npm``, ``pnpm``, or ``yarn``).
+    omit_dev : bool
+        Install only the runtime dependencies, leaving the development ones out of the
+        archive. Only use it for ebuilds that do not run a build step.
     dist_settings : DistGitHubSettings | None
         Optional GitHub release destination for the produced archive.
     """
@@ -72,6 +81,8 @@ async def update_nodejs_ebuild(ebuild: str,
     if not command:
         logger.error('Unsupported package manager: %s', package_manager)
         return
+    if omit_dev:
+        command += PACKAGE_MANAGER_OMIT_DEV_FLAGS[manager]
 
     try:
         proc = await asyncio.create_subprocess_exec(*command, cwd=package_path)
