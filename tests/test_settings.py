@@ -43,6 +43,7 @@ def test_livecheck_settings_defaults() -> None:
     assert isinstance(s.nodejs_packages, dict)
     assert isinstance(s.nodejs_path, dict)
     assert isinstance(s.nodejs_package_managers, dict)
+    assert isinstance(s.nodejs_omit_dev, dict)
     assert isinstance(s.development, dict)
     assert isinstance(s.composer_packages, dict)
     assert isinstance(s.composer_path, dict)
@@ -90,6 +91,15 @@ def test_get_package_manager_defaults_to_global() -> None:
 def test_get_package_manager_returns_override() -> None:
     s = LivecheckSettings(nodejs_package_managers={'cat/pkg': 'yarn'})
     assert s.get_package_manager('cat/pkg') == 'yarn'
+
+
+def test_omit_dev_dependencies_defaults_to_false() -> None:
+    assert LivecheckSettings().omit_dev_dependencies('cat/pkg') is False
+
+
+def test_omit_dev_dependencies_returns_override() -> None:
+    s = LivecheckSettings(nodejs_omit_dev={'cat/pkg': True})
+    assert s.omit_dev_dependencies('cat/pkg') is True
 
 
 def test_dist_settings_for_returns_none_without_configuration() -> None:
@@ -241,6 +251,7 @@ def test_gather_settings_handles_various_fields(tmp_path: Path) -> None:
         'nodejs': True,
         'nodejs_path': 'node/path',
         'nodejs_package_manager': 'yarn',
+        'nodejs_omit_dev': True,
         'development': True,
         'composer': True,
         'composer_path': 'composer/path',
@@ -271,6 +282,7 @@ def test_gather_settings_handles_various_fields(tmp_path: Path) -> None:
     assert result.nodejs_packages['cat/pkg'] is True
     assert result.nodejs_path['cat/pkg'] == 'node/path'
     assert result.nodejs_package_managers['cat/pkg'] == 'yarn'
+    assert result.nodejs_omit_dev['cat/pkg'] is True
     assert result.development['cat/pkg'] is True
     assert result.composer_packages['cat/pkg'] is True
     assert result.composer_path['cat/pkg'] == 'composer/path'
@@ -454,6 +466,7 @@ def test_gather_settings_nodejs_without_nodejs_path(tmp_path: Path, mocker: Mock
     # Should default to empty string if nodejs_path is missing
     assert not result.nodejs_path['cat/pkg']
     assert 'cat/pkg' not in result.nodejs_package_managers
+    assert 'cat/pkg' not in result.nodejs_omit_dev
     logger.error.assert_not_called()
 
 

@@ -163,6 +163,53 @@ async def test_update_nodejs_ebuild_other_package_manager(mocker: MockerFixture)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(('package_manager', 'flag'), [('npm', '--omit=dev'),
+                                                       ('yarn', '--production'),
+                                                       ('pnpm', '--prod')])
+async def test_update_nodejs_ebuild_omit_dev(mocker: MockerFixture, package_manager: str,
+                                             flag: str) -> None:
+    mock_search_ebuild = mocker.patch('livecheck.special.nodejs.search_ebuild',
+                                      new_callable=AsyncMock)
+    mock_build_compress = mocker.patch('livecheck.special.nodejs.build_compress',
+                                       new_callable=AsyncMock)
+
+    mock_search_ebuild.return_value = ('/tmp/pkg', '/tmp/tmpdir')
+
+    mock_proc = mocker.MagicMock()
+    mock_proc.wait = AsyncMock(return_value=0)
+    mock_create = mocker.patch('livecheck.special.nodejs.asyncio.create_subprocess_exec',
+                               new_callable=AsyncMock,
+                               return_value=mock_proc)
+
+    await update_nodejs_ebuild('dummy.ebuild',
+                               None, {},
+                               package_manager=package_manager,
+                               omit_dev=True)
+
+    assert mock_create.call_args.args[-1] == flag
+    mock_build_compress.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_nodejs_ebuild_keeps_dev_by_default(mocker: MockerFixture) -> None:
+    mock_search_ebuild = mocker.patch('livecheck.special.nodejs.search_ebuild',
+                                      new_callable=AsyncMock)
+    mocker.patch('livecheck.special.nodejs.build_compress', new_callable=AsyncMock)
+
+    mock_search_ebuild.return_value = ('/tmp/pkg', '/tmp/tmpdir')
+
+    mock_proc = mocker.MagicMock()
+    mock_proc.wait = AsyncMock(return_value=0)
+    mock_create = mocker.patch('livecheck.special.nodejs.asyncio.create_subprocess_exec',
+                               new_callable=AsyncMock,
+                               return_value=mock_proc)
+
+    await update_nodejs_ebuild('dummy.ebuild', None, {})
+
+    assert '--omit=dev' not in mock_create.call_args.args
+
+
+@pytest.mark.asyncio
 async def test_update_nodejs_ebuild_invalid_package_manager(mocker: MockerFixture) -> None:
     mock_search_ebuild = mocker.patch('livecheck.special.nodejs.search_ebuild',
                                       new_callable=AsyncMock)

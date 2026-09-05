@@ -1151,7 +1151,8 @@ async def test_do_main_nodejs_packages(mocker: MockerFixture, tmp_path: Path,
         f'{search_dir}/{cat}/{pkg}/{pkg}-{last_version}.ebuild',
         mocker.ANY, {},
         'npm',
-        dist_settings=mocker.ANY)
+        dist_settings=mocker.ANY,
+        omit_dev=mocker.ANY)
     mock_write.assert_called_once_with('abcdef1', encoding='utf-8')
 
 
@@ -1217,7 +1218,8 @@ async def test_do_main_nodejs_packages_custom_manager(mocker: MockerFixture, tmp
         f'{search_dir}/{cat}/{pkg}/{pkg}-{last_version}.ebuild',
         mocker.ANY, {},
         'yarn',
-        dist_settings=mocker.ANY)
+        dist_settings=mocker.ANY,
+        omit_dev=mocker.ANY)
     mock_write.assert_called_once_with('abcdef1', encoding='utf-8')
 
 

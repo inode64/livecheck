@@ -191,6 +191,9 @@ def _apply_nodejs(settings: LivecheckSettings, parsed: Mapping[str, Any], catpkg
             log.error('Invalid "nodejs_package_manager" in %s.', path)
         else:
             settings.nodejs_package_managers[catpkg] = manager
+    if 'nodejs_omit_dev' in parsed:
+        check_instance(parsed['nodejs_omit_dev'], 'nodejs_omit_dev', 'bool', path)
+        settings.nodejs_omit_dev[catpkg] = parsed['nodejs_omit_dev']
 
 
 def _apply_version(settings: LivecheckSettings, parsed: Mapping[str, Any], catpkg: str,

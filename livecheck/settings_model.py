@@ -44,6 +44,7 @@ class LivecheckSettings:
     nodejs_packages: dict[str, bool] = field(default_factory=dict)
     nodejs_path: dict[str, str] = field(default_factory=dict)
     nodejs_package_managers: dict[str, str] = field(default_factory=dict)
+    nodejs_omit_dev: dict[str, bool] = field(default_factory=dict)
     development: dict[str, bool] = field(default_factory=dict)
     composer_packages: dict[str, bool] = field(default_factory=dict)
     composer_path: dict[str, str] = field(default_factory=dict)
@@ -134,3 +135,19 @@ class LivecheckSettings:
             Package manager command name for Node.js fetches.
         """
         return self.nodejs_package_managers.get(catpkg, self.default_package_manager)
+
+    def omit_dev_dependencies(self, catpkg: str) -> bool:
+        """
+        Check if the Node.js archive must be built without the development dependencies.
+
+        Parameters
+        ----------
+        catpkg : str
+            Category-package atom.
+
+        Returns
+        -------
+        bool
+            Whether ``node_modules`` is populated with the runtime dependencies only.
+        """
+        return self.nodejs_omit_dev.get(catpkg, False)
