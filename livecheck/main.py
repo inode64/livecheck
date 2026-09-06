@@ -1032,9 +1032,8 @@ async def _async_main(*,
                               settings=settings,
                               top_hash=top_hash,
                               url=url)
-            except HookError:
-                log.exception('Hook failed; skipping `%s/%s`.', cat, pkg)
-            except Exception:
+            except HookError as exc:
+                log.error('%s; skipping `%s/%s`.', exc, cat, pkg)
                 log.exception('Unexpected error processing `%s/%s`; skipping.', cat, pkg)
                 return True
         return False
