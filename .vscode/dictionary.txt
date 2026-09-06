@@ -33,6 +33,7 @@ commitizen
 concurrentqueue
 conftest
 connectionpool
+cooldown
 coveragerc
 coverallsapp
 cpan
@@ -84,12 +85,14 @@ glabels
 globaltoc
 glslang
 gomodule
+graphify
 grepmail
 handoff
 hoverxref
 htmlcov
 icingaweb
 imgui
+intersphinx
 isort
 itertools
 jimevins
@@ -190,6 +193,7 @@ rela
 repology
 resumecommand
 ripgreprc
+rocm
 rstcheck
 rubygems
 sbclaude
@@ -219,6 +223,7 @@ tasksh
 tatsh
 tempy
 testpaths
+therock
 toctree
 tomlkit
 tomllib
