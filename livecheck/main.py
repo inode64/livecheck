@@ -742,7 +742,7 @@ async def execute_hooks(hook_dir: Path | None, action: str, search_dir: Path, cp
         return
     for hook in sorted(hook_path.iterdir()):
         if hook.is_file() and os.access(hook, os.X_OK):
-            log.debug('Running hook {hook}')
+            log.debug('Running hook `%s`.', hook)
             proc = await asyncio.create_subprocess_exec(str(hook), str(search_dir), cp,
                                                         str_old_version, str_new_version, old_sha,
                                                         new_sha, hash_date)
@@ -1033,7 +1033,9 @@ async def _async_main(*,
                               top_hash=top_hash,
                               url=url)
             except HookError as exc:
-                log.error('%s; skipping `%s/%s`.', exc, cat, pkg)
+                # A failing hook is an expected outcome, so the traceback is not wanted.
+                log.error('%s Skipping `%s/%s`.', exc, cat, pkg)  # noqa: TRY400
+            except Exception:
                 log.exception('Unexpected error processing `%s/%s`; skipping.', cat, pkg)
                 return True
         return False

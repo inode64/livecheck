@@ -3526,7 +3526,7 @@ def test_main_calls_get_props_and_do_main(mocker: MockerFixture, runner: CliRunn
 
 
 def test_main_continues_after_package_failure(mocker: MockerFixture, runner: CliRunner,
-                                              tmp_path: Path) -> None:
+                                              tmp_path: Path, caplog: LogCaptureFixture) -> None:
     mock_settings = mocker.Mock()
     mocker.patch('livecheck.main.chdir')
     mocker.patch('livecheck.main.setup_logging')
@@ -3546,11 +3546,16 @@ def test_main_continues_after_package_failure(mocker: MockerFixture, runner: Cli
     mocker.patch('livecheck.main.get_props',
                  return_value=[('cat', 'pkg', '1.0.0', '1.0.1', 'sha', 'date', 'url'),
                                ('cat2', 'pkg2', '2.0.0', '2.0.1', 'sha2', 'date2', 'url2')])
-    result = runner.invoke(
-        main, ['--auto-update', '--working-dir',
-               str(tmp_path), 'cat/pkg', 'cat2/pkg2'])
+    with caplog.at_level(logging.ERROR):
+        result = runner.invoke(
+            main, ['--auto-update', '--working-dir',
+                   str(tmp_path), 'cat/pkg', 'cat2/pkg2'])
     assert result.exit_code == 0
     assert mock_do_main.call_count == 2
+    hook_records = [r for r in caplog.records if 'Skipping `cat/pkg`' in r.getMessage()]
+    assert len(hook_records) == 1
+    assert hook_records[0].levelno == logging.ERROR
+    assert hook_records[0].exc_info is None
     mock_do_main.assert_any_call(cat='cat2',
                                  pkg='pkg2',
                                  ebuild_version='2.0.0',
@@ -3564,7 +3569,8 @@ def test_main_continues_after_package_failure(mocker: MockerFixture, runner: Cli
 
 
 def test_main_unexpected_error_continues_but_exits_nonzero(mocker: MockerFixture, runner: CliRunner,
-                                                           tmp_path: Path) -> None:
+                                                           tmp_path: Path,
+                                                           caplog: LogCaptureFixture) -> None:
     mock_settings = mocker.Mock()
     mocker.patch('livecheck.main.chdir')
     mocker.patch('livecheck.main.setup_logging')
@@ -3584,11 +3590,17 @@ def test_main_unexpected_error_continues_but_exits_nonzero(mocker: MockerFixture
     mocker.patch('livecheck.main.get_props',
                  return_value=[('cat', 'pkg', '1.0.0', '1.0.1', 'sha', 'date', 'url'),
                                ('cat2', 'pkg2', '2.0.0', '2.0.1', 'sha2', 'date2', 'url2')])
-    result = runner.invoke(
-        main, ['--auto-update', '--working-dir',
-               str(tmp_path), 'cat/pkg', 'cat2/pkg2'])
+    with caplog.at_level(logging.ERROR):
+        result = runner.invoke(
+            main, ['--auto-update', '--working-dir',
+                   str(tmp_path), 'cat/pkg', 'cat2/pkg2'])
     assert result.exit_code != 0
     assert mock_do_main.call_count == 2
+    error_records = [
+        r for r in caplog.records if 'Unexpected error processing `cat/pkg`' in r.getMessage()
+    ]
+    assert len(error_records) == 1
+    assert error_records[0].exc_info is not None
     mock_do_main.assert_any_call(cat='cat2',
                                  pkg='pkg2',
                                  ebuild_version='2.0.0',
