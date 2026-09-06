@@ -20,10 +20,11 @@ if TYPE_CHECKING:
 
     from livecheck.settings_model import LivecheckSettings
 
-__all__ = ('P', 'catpkg_catpkgsplit', 'catpkgsplit2', 'compare_versions', 'fetch_ebuild', 'get_aux',
-           'get_distdir', 'get_fetch_map', 'get_first_src_uri', 'get_highest_matches',
-           'get_last_version', 'get_repository_catpkgs', 'get_repository_root_if_inside',
-           'remove_leading_zeros', 'sanitize_version', 'unpack_ebuild')
+__all__ = ('P', 'catpkg_catpkgsplit', 'catpkgsplit2', 'compare_versions', 'current_version_result',
+           'fetch_ebuild', 'get_aux', 'get_distdir', 'get_fetch_map', 'get_first_src_uri',
+           'get_highest_matches', 'get_last_version', 'get_repository_catpkgs',
+           'get_repository_root_if_inside', 'remove_leading_zeros', 'sanitize_version',
+           'unpack_ebuild')
 
 P = portage.db[portage.root]['porttree'].dbapi
 """Portage tree database API instance.
@@ -405,6 +406,13 @@ def remove_leading_zeros(ver: str) -> str:
     return ver
 
 
+_PEP440_PRE_RELEASE_LETTERS = frozenset({'a', 'b', 'rc'})
+"""Pre-release markers PEP 440 places directly after the release segment.
+
+:meta hide-value:
+"""
+
+
 def normalize_version(ver: str) -> str:
     """
     Normalise a version string to Gentoo ebuild format.
@@ -435,6 +443,9 @@ def normalize_version(ver: str) -> str:
     if not (main := main.rstrip('.')):
         return ver
 
+    # PEP 440 writes the pre-release counter straight after the release segment, as in
+    # ``0.65b0``, and PyPI serves the files under that spelling, so its explicit zero is kept.
+    pep440_counter = 0 < i < len(ver) and ver[i - 1].isdigit() and ver[i].isalpha()
     suf = re.sub(r'[-_\. ]', '', suf)
     if suf.isdigit():
         return f'{main}.{suf}'
@@ -446,12 +457,13 @@ def normalize_version(ver: str) -> str:
     else:
         letters, digits = '', ''
 
+    pep440_counter = pep440_counter and letters in _PEP440_PRE_RELEASE_LETTERS
     if digits:
         if letters == 'a':
             letters = 'alpha'
         if letters == 'b':
             letters = 'beta'
-    if digits == '0':
+    if digits == '0' and not pep440_counter:
         digits = ''
 
     if letters in {'test', 'dev'}:
@@ -632,6 +644,50 @@ def _candidate_version_from_reference(candidate: str, reference: str,
     return sanitize_version(candidate[len(prefix):end])
 
 
+def _candidate_version(tag: str, catpkg: str, repo: str, settings: LivecheckSettings) -> str:
+    version = tag
+    if tf := settings.transformations.get(catpkg, None):
+        version = tf(tag)
+    if catpkg in settings.regex_version:
+        regex, replace = settings.regex_version[catpkg]
+        return re.sub(regex, replace, version)
+    return sanitize_version(version, repo)
+
+
+def current_version_result(results: Collection[Mapping[str, str]], repo: str, ebuild: str,
+                           settings: LivecheckSettings) -> dict[str, str] | None:
+    """
+    Find the result that names the version the ebuild already packages.
+
+    Parameters
+    ----------
+    results : Collection[Mapping[str, str]]
+        Collection of result mappings containing version information.
+    repo : str
+        Repository name.
+    ebuild : str
+        Ebuild atom string.
+    settings : LivecheckSettings
+        Livecheck settings instance.
+
+    Returns
+    -------
+    dict[str, str] | None
+        Copy of the first result whose version equals the ebuild version without its revision,
+        or ``None`` if no result names it.
+    """
+    catpkg, _, _, ebuild_version = catpkg_catpkgsplit(ebuild)
+    return _current_result(results, catpkg, ebuild_version, repo, settings)
+
+
+def _current_result(results: Collection[Mapping[str, str]], catpkg: str, ebuild_version: str,
+                    repo: str, settings: LivecheckSettings) -> dict[str, str] | None:
+    packaged_version = re.sub(r'-r\d+$', '', ebuild_version)
+    return next((dict(result) for result in results
+                 if _candidate_version(result['tag'], catpkg, repo, settings) == packaged_version),
+                None)
+
+
 def get_last_version(results: Collection[Mapping[str, str]],
                      repo: str,
                      ebuild: str,
@@ -663,18 +719,20 @@ def get_last_version(results: Collection[Mapping[str, str]],
     catpkg, _, _, ebuild_version = catpkg_catpkgsplit(ebuild)
     last_version: dict[str, str] = {}
 
+    # Without a reference from the caller, the result naming the packaged version shows which
+    # tag scheme the ebuild follows, so results using another scheme (for example Go's
+    # ``weekly.2012-03-27`` next to ``go1.27.1``) are not mistaken for releases. Only sanitised
+    # versions are compared, as a transformation or regex may rewrite the scheme itself.
+    if (not version_reference and not settings.transformations.get(catpkg)
+            and catpkg not in settings.regex_version
+            and (current := _current_result(results, catpkg, ebuild_version, repo, settings))):
+        version_reference = _candidate_version_reference(current, current['tag'])
+        log.debug('Using the packaged version `%s` as the version reference.', version_reference)
+
     for result in results:
-        tag = version = result['tag']
-        if tf := settings.transformations.get(catpkg, None):
-            version = tf(tag)
-            log.debug('Applying transformation %s -> %s', tag, version)
-        if catpkg in settings.regex_version:
-            regex, replace = settings.regex_version[catpkg]
-            version = re.sub(regex, replace, version)
-            log.debug('Applying regex %s -> %s', tag, version)
-        else:
-            version = sanitize_version(version, repo)
-            log.debug('Convert Tag: %s -> %s', tag, version)
+        tag = result['tag']
+        version = _candidate_version(tag, catpkg, repo, settings)
+        log.debug('Convert Tag: %s -> %s', tag, version)
         if not version:
             continue
         reference_version = _candidate_version_from_reference(

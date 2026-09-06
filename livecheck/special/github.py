@@ -4,27 +4,48 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 from urllib.parse import quote, urlparse
+import logging
 import re
 
 from livecheck.utils import get_content, is_sha
-from livecheck.utils.portage import catpkg_catpkgsplit, get_last_version
+from livecheck.utils.portage import catpkg_catpkgsplit, current_version_result, get_last_version
 
 from .utils import get_archive_extension
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Collection, Mapping
+
     from livecheck.settings_model import LivecheckSettings
 
 __all__ = ('GITHUB_METADATA', 'get_github_branch_for_commit', 'get_latest_github',
            'get_latest_github_commit', 'get_latest_github_commit2', 'get_latest_github_metadata',
            'get_latest_github_package', 'is_github', 'is_github_release_url')
 
+log = logging.getLogger(__name__)
+
 GITHUB_BRANCH_URL = 'https://api.github.com/repos/%s/%s/branches/%s'
+GITHUB_COMMIT_URL = 'https://api.github.com/repos/%s/%s/commits/%s'
 GITHUB_COMPARE_URL = 'https://api.github.com/repos/%s/%s/compare/%s...%s'
 GITHUB_COMPARE_REACHABLE_STATUSES = frozenset({'ahead', 'identical'})
 """GitHub compare ``status`` values meaning the base commit is reachable from the head ref."""
 GITHUB_DATE_URL = 'https://api.github.com/repos/%s/%s/git/refs/tags/%s'
 GITHUB_METADATA = 'github'
-GITHUB_TAGS_URL = 'https://api.github.com/repos/%s/%s/tags?per_page=100'
+TAGS_PER_PAGE = 100
+"""Number of tags requested per page of the tags API.
+
+:meta hide-value:
+"""
+GITHUB_TAGS_URL = f'https://api.github.com/repos/%s/%s/tags?per_page={TAGS_PER_PAGE}&page=%d'
+STALE_TAG_CHECKS = 5
+"""Maximum number of tags whose commit date is checked against the packaged tag per lookup.
+
+:meta hide-value:
+"""
+TAG_PAGES = 5
+"""Maximum number of tag pages fetched while looking for the packaged tag.
+
+:meta hide-value:
+"""
 
 
 def _github_tag_reference(url: str) -> str:
@@ -122,6 +143,126 @@ async def get_github_branch_for_commit(url: str, version: str, commit: str) -> s
     return ''
 
 
+async def _tag_page(owner: str, repo: str, page: int) -> list[dict[str, str]] | None:
+    if not (r := await get_content(GITHUB_TAGS_URL % (owner, repo, page))):
+        return None
+    try:
+        tags = r.json()
+    except ValueError:
+        return None
+    if not isinstance(tags, list):
+        return None
+    results = []
+    for entry in tags:
+        if not isinstance(entry, dict) or not (name := entry.get('name')):
+            continue
+        commit = entry.get('commit')
+        sha = commit.get('sha', '') if isinstance(commit, dict) else ''
+        results.append({'tag': name, 'id': name, 'sha': str(sha or '')})
+    return results
+
+
+async def _tag_results(
+        owner: str, repo: str, found: Callable[[Collection[Mapping[str, str]]],
+                                               bool]) -> list[dict[str, str]] | None:
+    """
+    Fetch tags page by page until the wanted one shows up.
+
+    GitHub orders tags by name, so a scheme that sorts first (Go's ``weekly.*`` tags, for example)
+    can fill the first page and hide the releases behind it.
+
+    Parameters
+    ----------
+    owner : str
+        Repository owner or organisation.
+    repo : str
+        Repository name.
+    found : Callable[[Collection[Mapping[str, str]]], bool]
+        Predicate telling whether the tags fetched so far include the wanted one.
+
+    Returns
+    -------
+    list[dict[str, str]] | None
+        Tag results, or ``None`` if the first page could not be read.
+    """
+    results: list[dict[str, str]] = []
+    for page in range(1, TAG_PAGES + 1):
+        if (entries := await _tag_page(owner, repo, page)) is None:
+            return results or None
+        results.extend(entries)
+        if len(entries) < TAGS_PER_PAGE or found(results):
+            break
+    return results
+
+
+async def _commit_date(owner: str, repo: str, sha: str) -> str:
+    if not sha or not (r := await get_content(GITHUB_COMMIT_URL %
+                                              (owner, repo, quote(sha, safe='')))):
+        return ''
+    try:
+        return str(r.json()['commit']['committer']['date'])
+    except (KeyError, TypeError, ValueError):
+        return ''
+
+
+async def _newest_tag(results: Collection[Mapping[str, str]],
+                      owner: str,
+                      repo: str,
+                      ebuild: str,
+                      settings: LivecheckSettings,
+                      version_reference: str = '') -> dict[str, str]:
+    """
+    Pick the newest tag, ignoring higher tags that predate the packaged one.
+
+    A repository may keep a tag such as ``v1.0.0`` from an abandoned line next to the ``v0.9.x``
+    releases it actually ships. Such a tag sorts above the packaged version but its commit is older
+    than the packaged tag's commit, so it is dropped and the next candidate is considered.
+
+    Parameters
+    ----------
+    results : Collection[Mapping[str, str]]
+        Tag results as produced by :py:func:`_tag_results`.
+    owner : str
+        Repository owner or organisation.
+    repo : str
+        Repository name.
+    ebuild : str
+        Ebuild atom string.
+    settings : LivecheckSettings
+        Livecheck settings.
+    version_reference : str
+        Current upstream tag or filename whose versioned pattern candidates must match.
+
+    Returns
+    -------
+    dict[str, str]
+        Newest acceptable tag result, or an empty dictionary if there is none.
+    """
+    candidates = list(results)
+    current: dict[str, str] | None = None
+    current_date = ''
+    for _ in range(STALE_TAG_CHECKS):
+        if not (last_version := get_last_version(
+                candidates, repo, ebuild, settings, version_reference=version_reference)):
+            return {}
+        if not last_version.get('sha'):
+            return last_version
+        if current is None:
+            current = current_version_result(results, repo, ebuild, settings) or {}
+        if (not current.get('sha') or current['tag'] == last_version['tag']
+                or not (current_date := current_date
+                        or await _commit_date(owner, repo, current['sha']))):
+            return last_version
+        candidate_date = await _commit_date(owner, repo, last_version['sha'])
+        if not candidate_date or candidate_date >= current_date:
+            return last_version
+        log.debug('Skip tag `%s` (%s): older than the packaged tag `%s` (%s).', last_version['tag'],
+                  candidate_date, current['tag'], current_date)
+        candidates = [result for result in candidates if result['tag'] != last_version['tag']]
+    log.debug('Gave up on %s after %d tags older than the packaged tag.', ebuild, STALE_TAG_CHECKS)
+    return {}
+
+
 async def get_latest_github_package(url: str, ebuild: str,
                                     settings: LivecheckSettings) -> tuple[str, str]:
     """
@@ -143,23 +284,14 @@ async def get_latest_github_package(url: str, ebuild: str,
     """
     version_reference = _github_tag_reference(url)
     _, owner, repo = extract_owner_repo(url)
-    if not owner or not repo or not (r := await get_content(GITHUB_TAGS_URL % (owner, repo))):
+    if not owner or not repo or (results := await _tag_results(
+            owner, repo,
+            lambda fetched: current_version_result(fetched, repo, ebuild, settings) is not None)
+                                 ) is None:
         return '', ''
 
-    try:
-        tags = r.json()
-    except ValueError:
-        return '', ''
-    if not isinstance(tags, list):
-        return '', ''
-
-    results = [{
-        'tag': name,
-        'id': name
-    } for entry in tags if isinstance(entry, dict) and (name := entry.get('name'))]
-
-    if not (last_version := get_last_version(
-            results, repo, ebuild, settings, version_reference=version_reference)):
+    if not (last_version := await _newest_tag(
+            results, owner, repo, ebuild, settings, version_reference=version_reference)):
         return '', ''
 
     url = GITHUB_DATE_URL % (owner, repo, last_version['id'])
@@ -269,7 +401,7 @@ def is_github_release_url(url: str) -> bool:
     return is_github(url) and 'releases' in [part for part in urlparse(url).path.split('/') if part]
 
 
-def get_branch(url: str, ebuild: str, settings: LivecheckSettings) -> str:
+def _explicit_branch(url: str, ebuild: str, settings: LivecheckSettings) -> str:
     catpkg, _, _, _ = catpkg_catpkgsplit(ebuild)
 
     # get branch from url
@@ -278,7 +410,11 @@ def get_branch(url: str, ebuild: str, settings: LivecheckSettings) -> str:
         return parts[-1].replace('.atom', '')
 
     # get branch from settings
-    if (branch := settings.branches.get(catpkg, '')):
+    return str(settings.branches.get(catpkg, ''))
+
+
+def get_branch(url: str, ebuild: str, settings: LivecheckSettings) -> str:
+    if (branch := _explicit_branch(url, ebuild, settings)):
         return branch
 
     # default branch is master
@@ -286,6 +422,59 @@ def get_branch(url: str, ebuild: str, settings: LivecheckSettings) -> str:
         return 'master'
 
     return ''
+
+
+def _pinned_sha(url: str) -> str:
+    if not (length := is_sha(urlparse(url).path)):
+        return ''
+    return urlparse(url).path.rsplit('/', 1)[-1][:length]
+
+
+async def _latest_from_pinned_tag(url: str, ebuild: str,
+                                  settings: LivecheckSettings) -> tuple[str, str, str] | None:
+    """
+    Resolve a commit-pinned URL through the tag list when the commit is a release tag.
+
+    An ebuild that pins the commit of a release tag (for example a ROCm ``therock-10.0`` commit
+    from a monorepo archive) tracks releases, not the default branch, so the branch head must not
+    trigger a revision bump on every run.
+
+    Parameters
+    ----------
+    url : str
+        GitHub URL whose last path segment is the pinned commit.
+    ebuild : str
+        Ebuild atom string.
+    settings : LivecheckSettings
+        Livecheck settings.
+
+    Returns
+    -------
+    tuple[str, str, str] | None
+        Latest version, its commit, and an empty date, or ``None`` if the commit is not a tag.
+    """
+    sha = _pinned_sha(url)
+    _, owner, repo = extract_owner_repo(url)
+
+    def is_pinned(result: Mapping[str, str]) -> bool:
+        return result['sha'].startswith(sha)
+
+    if not owner or not repo or (results := await _tag_results(
+            owner, repo, lambda fetched: any(is_pinned(result) for result in fetched))) is None:
+        return None
+    if not (pinned := [result for result in results if is_pinned(result)]):
+        return None
+    # Several tags may sit on the same commit, so the one carrying the highest version names the
+    # release line the ebuild follows.
+    if not (pinned_tag := get_last_version(pinned, repo, ebuild, settings)):
+        return None
+    log.debug('Commit %s is tag `%s`; comparing tags instead of a branch.', sha, pinned_tag['tag'])
+    _, _, _, ebuild_version = catpkg_catpkgsplit(ebuild)
+    if (last_version := await _newest_tag(
+            results, owner, repo, ebuild, settings,
+            version_reference=pinned_tag['tag'])) and last_version['tag'] != pinned_tag['tag']:
+        return last_version['version'], last_version['sha'], ''
+    return ebuild_version, '', ''
 
 
 async def get_latest_github(url: str, ebuild: str, settings: LivecheckSettings, *,
@@ -312,6 +501,9 @@ async def get_latest_github(url: str, ebuild: str, settings: LivecheckSettings, 
     """
     last_version = top_hash = hash_date = ''
 
+    if (_pinned_sha(url) and not _explicit_branch(url, ebuild, settings)
+            and (pinned := await _latest_from_pinned_tag(url, ebuild, settings)) is not None):
+        return pinned
     if (branch := get_branch(url, ebuild, settings)):
         top_hash, hash_date = await get_latest_github_commit(url, branch)
     else:
