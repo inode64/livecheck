@@ -15,6 +15,20 @@ and this project adheres to
 - Add the `nodejs_omit_dev` package setting. When enabled, the `node_modules` archive is built with
   the runtime dependencies only, so it is only suitable for ebuilds that do not run a build step.
 
+### Fixed
+
+- Ignore GitHub tags that sort above the packaged version but whose commit predates the packaged
+  tag, such as a `v1.0.0` left behind on an abandoned branch next to the `v0.9.x` releases.
+- Treat an ebuild that pins the commit of a GitHub release tag (for example the ROCm
+  `therock-10.0` monorepo tags) as tracking that tag line. Newer tags on the same line are
+  proposed instead of bumping the revision to the branch head on every run.
+- Use the tag naming the packaged version as the version reference when no other reference is
+  known, so tags following another scheme (Go's `weekly.2012-03-27` next to `go1.27.1`) are not
+  reported as updates. The GitHub tag list is now read page by page until that tag is found.
+- Keep the explicit zero of PEP 440 pre-release counters such as `0.65b0`, which now becomes
+  `0.65_beta0` instead of `0.65_beta`. PyPI serves the files under that spelling, so an ebuild
+  named after the shorter form fails to fetch.
+
 ## [0.2.7] - 2026-09-04
 
 ### Fixed

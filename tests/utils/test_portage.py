@@ -13,6 +13,7 @@ from livecheck.utils.portage import (
     catpkg_catpkgsplit,
     catpkgsplit2,
     compare_versions,
+    current_version_result,
     digest_ebuild,
     fetch_ebuild,
     get_aux,
@@ -89,7 +90,12 @@ if TYPE_CHECKING:
         ('0.8 patchlevel   6', '0.8_p6'),
         ('0.0.8b2', '0.0.8_beta2'),
         ('0.0.8a5', '0.0.8_alpha5'),
-        ('0.1.8b0', '0.1.8_beta'),
+        # PEP 440 keeps the pre-release counter, and PyPI serves files under that spelling
+        ('0.1.8b0', '0.1.8_beta0'),
+        ('0.65b0', '0.65_beta0'),
+        ('2.0a0', '2.0_alpha0'),
+        ('1.0rc0', '1.0_rc0'),
+        ('1.0-b0', '1.0_beta'),
         ('1.4.1-build.2', '1.4.1'),
         # VapourSynth: filter tags with long unrecognized suffixes (test/dev tags)
         ('R71-limited-api-test1', ''),
@@ -809,7 +815,7 @@ def test_get_last_version_cases(mocker: MockerFixture, results: Collection[Mappi
         raise ValueError(msg)
 
     mocker.patch('livecheck.utils.portage.catpkg_catpkgsplit', side_effect=fake_catpkg_catpkgsplit)
-    mocker.patch('livecheck.utils.portage.sanitize_version', side_effect=lambda v, _: v)
+    mocker.patch('livecheck.utils.portage.sanitize_version', side_effect=lambda v, _repo='': v)
     mocker.patch('livecheck.utils.portage.compare_versions', side_effect=operator.lt)
 
     # Patch accept_version if requested
@@ -993,6 +999,70 @@ def test_get_last_version_rejects_mismatched_file_reference(mocker: MockerFixtur
 
     assert result['version'] == '3.7.2'
     assert result['tag'] == 'loki-3.7.2.x86_64.rpm'
+
+
+def test_get_last_version_infers_reference_from_packaged_tag(mocker: MockerFixture) -> None:
+    dummy_settings = mocker.Mock()
+    dummy_settings.regex_version = {}
+    dummy_settings.restrict_version = {}
+    dummy_settings.restrict_version_process = ''
+    dummy_settings.stable_version = {}
+    dummy_settings.transformations = {}
+    dummy_settings.is_devel = lambda _: False
+
+    # Without a reference, the tag naming the packaged version identifies the release scheme, so
+    # the dated `weekly.*` tags are not mistaken for a release.
+    result = get_last_version([{
+        'tag': 'weekly.2012-03-27'
+    }, {
+        'tag': 'go1.27.2'
+    }, {
+        'tag': 'go1.27.1'
+    }], 'go', 'dev-lang/go-1.27.1', dummy_settings)
+
+    assert result['version'] == '1.27.2'
+    assert result['tag'] == 'go1.27.2'
+
+
+def test_get_last_version_does_not_infer_reference_with_transformation(
+        mocker: MockerFixture) -> None:
+    dummy_settings = mocker.Mock()
+    dummy_settings.regex_version = {}
+    dummy_settings.restrict_version = {}
+    dummy_settings.restrict_version_process = ''
+    dummy_settings.stable_version = {}
+    dummy_settings.transformations = {'dev-lang/go': lambda tag: tag.removeprefix('go')}
+    dummy_settings.is_devel = lambda _: False
+
+    result = get_last_version([{
+        'tag': 'weekly.2012-03-27'
+    }, {
+        'tag': 'go1.27.1'
+    }], 'go', 'dev-lang/go-1.27.1', dummy_settings)
+
+    assert result['version'] == '2012.3.27'
+    assert result['tag'] == 'weekly.2012-03-27'
+
+
+@pytest.mark.parametrize(('results', 'ebuild', 'expected'), [
+    ([{
+        'tag': 'v1.2.4'
+    }, {
+        'tag': 'v1.2.3'
+    }], 'cat/pkg-1.2.3-r2', {
+        'tag': 'v1.2.3'
+    }),
+    ([{
+        'tag': 'v1.2.4'
+    }], 'cat/pkg-1.2.3', None),
+])
+def test_current_version_result(mocker: MockerFixture, results: Collection[Mapping[str, str]],
+                                ebuild: str, expected: Mapping[str, str] | None) -> None:
+    dummy_settings = mocker.Mock()
+    dummy_settings.regex_version = {}
+    dummy_settings.transformations = {}
+
+    assert current_version_result(results, 'pkg', ebuild, dummy_settings) == expected
 
 
 @pytest.mark.parametrize(

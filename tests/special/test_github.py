@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from livecheck.settings_model import LivecheckSettings
 from livecheck.special.github import (
     extract_owner_repo,
     get_branch,
@@ -683,3 +684,251 @@ async def test_get_github_branch_for_commit_returns_empty_when_no_candidate_matc
     result = await get_github_branch_for_commit('https://github.com/org/repo/releases', '2.9',
                                                 'a' * 40)
     assert not result
+
+
+def _patch_github_api(mocker: MockerFixture, responses: Mapping[str, Any]) -> None:
+    def fake_get_content(url: str) -> Mock:
+        response: Mock = mocker.Mock()
+        response.json.return_value = responses[url]
+        return response
+
+    mocker.patch('livecheck.special.github.get_content', side_effect=fake_get_content)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_github_package_skips_tag_older_than_packaged_tag(
+        mocker: MockerFixture) -> None:
+    api = 'https://api.github.com/repos/safishamsi/graphify'
+    # `v1.0.0` sorts highest but was cut months before the packaged `v0.9.55`, so it is stale.
+    _patch_github_api(
+        mocker, {
+            f'{api}/tags?per_page=100&page=1': [{
+                'name': 'v1.0.0',
+                'commit': {
+                    'sha': 'a' * 40
+                }
+            }, {
+                'name': 'v0.9.56',
+                'commit': {
+                    'sha': 'c' * 40
+                }
+            }, {
+                'name': 'v0.9.55',
+                'commit': {
+                    'sha': 'b' * 40
+                }
+            }],
+            f'{api}/commits/{"a" * 40}': {
+                'commit': {
+                    'committer': {
+                        'date': '2026-04-05T21:40:34Z'
+                    }
+                }
+            },
+            f'{api}/commits/{"b" * 40}': {
+                'commit': {
+                    'committer': {
+                        'date': '2026-09-05T21:15:39Z'
+                    }
+                }
+            },
+            f'{api}/commits/{"c" * 40}': {
+                'commit': {
+                    'committer': {
+                        'date': '2026-09-06T10:00:00Z'
+                    }
+                }
+            },
+            f'{api}/git/refs/tags/v0.9.56': {
+                'object': {
+                    'type': 'commit',
+                    'sha': 'c' * 40
+                }
+            }
+        })
+
+    result = await get_latest_github_package('https://github.com/safishamsi/graphify',
+                                             'dev-util/graphify-0.9.55', LivecheckSettings())
+
+    assert result == ('0.9.56', 'c' * 40)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_github_package_gives_up_after_too_many_stale_tags(
+        mocker: MockerFixture) -> None:
+    api = 'https://api.github.com/repos/org/scripts'
+    # Portage sorts `1.099` above `1.0111`, yet every such tag is older than the packaged one.
+    stale = [f'1.0{n}' for n in (99, 96, 92, 88, 86, 85)]
+    responses: dict[str, Any] = {
+        f'{api}/tags?per_page=100&page=1': [{
+            'name': tag,
+            'commit': {
+                'sha': f'{n:040x}'
+            }
+        } for n, tag in enumerate([*stale, '1.0111'], start=1)],
+        f'{api}/commits/{len(stale) + 1:040x}': {
+            'commit': {
+                'committer': {
+                    'date': '2026-07-12T00:00:00Z'
+                }
+            }
+        }
+    }
+    responses.update({
+        f'{api}/commits/{n:040x}': {
+            'commit': {
+                'committer': {
+                    'date': f'2025-01-{n:02d}T00:00:00Z'
+                }
+            }
+        }
+        for n in range(1,
+                       len(stale) + 1)
+    })
+    _patch_github_api(mocker, responses)
+
+    result = await get_latest_github_package(
+        'https://github.com/org/scripts/releases/download/1.0111/x.zip',
+        'dev-util/scripts-bin-1.0111', LivecheckSettings())
+
+    assert result == ('', '')
+
+
+@pytest.mark.asyncio
+async def test_get_latest_github_package_reads_more_pages_until_packaged_tag(
+        mocker: MockerFixture) -> None:
+    api = 'https://api.github.com/repos/golang/go'
+    # A full first page of dated `weekly.*` tags hides the releases on the next page.
+    _patch_github_api(
+        mocker, {
+            f'{api}/tags?per_page=100&page=1': [{
+                'name': f'weekly.2012-03-{day:02d}',
+                'commit': {
+                    'sha': 'a' * 40
+                }
+            } for day in range(100)],
+            f'{api}/tags?per_page=100&page=2': [{
+                'name': 'go1.27.2',
+                'commit': {
+                    'sha': 'b' * 40
+                }
+            }, {
+                'name': 'go1.27.1',
+                'commit': {
+                    'sha': 'c' * 40
+                }
+            }],
+            f'{api}/commits/{"b" * 40}': {
+                'commit': {
+                    'committer': {
+                        'date': '2026-09-01T00:00:00Z'
+                    }
+                }
+            },
+            f'{api}/commits/{"c" * 40}': {
+                'commit': {
+                    'committer': {
+                        'date': '2026-08-01T00:00:00Z'
+                    }
+                }
+            },
+            f'{api}/git/refs/tags/go1.27.2': {
+                'object': {
+                    'type': 'commit',
+                    'sha': 'b' * 40
+                }
+            }
+        })
+
+    result = await get_latest_github_package('https://github.com/golang/go', 'dev-lang/go-1.27.1',
+                                             LivecheckSettings())
+
+    assert result == ('1.27.2', 'b' * 40)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_github_pinned_commit_is_tag_without_newer_release(
+        mocker: MockerFixture) -> None:
+    sha = '6b0e43f341195e203754e08f850e437ff2fc09f9'
+    _patch_github_api(
+        mocker, {
+            'https://api.github.com/repos/ROCm/rocm-systems/tags?per_page=100&page=1': [{
+                'name': 'therock-10.0',
+                'commit': {
+                    'sha': sha
+                }
+            }, {
+                'name': 'rocm-7.2.4',
+                'commit': {
+                    'sha': 'd' * 40
+                }
+            }]
+        })
+    mock_commit = mocker.patch('livecheck.special.github.get_latest_github_commit')
+
+    result = await get_latest_github(f'https://github.com/ROCm/rocm-systems/archive/{sha}.tar.gz',
+                                     'dev-libs/rocm-core-10.0.0',
+                                     LivecheckSettings(),
+                                     force_sha=False)
+
+    # The pinned commit is a release tag, so the branch head must not bump the revision.
+    assert result == ('10.0.0', '', '')
+    mock_commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_github_pinned_commit_is_tag_with_newer_release(
+        mocker: MockerFixture) -> None:
+    sha = '6b0e43f341195e203754e08f850e437ff2fc09f9'
+    _patch_github_api(
+        mocker, {
+            'https://api.github.com/repos/ROCm/rocm-systems/tags?per_page=100&page=1': [{
+                'name': 'therock-10.1',
+                'commit': {
+                    'sha': 'e' * 40
+                }
+            }, {
+                'name': 'therock-10.0',
+                'commit': {
+                    'sha': sha
+                }
+            }, {
+                'name': 'rocm-7.2.4',
+                'commit': {
+                    'sha': 'd' * 40
+                }
+            }]
+        })
+    mocker.patch('livecheck.special.github.get_latest_github_commit')
+
+    result = await get_latest_github(f'https://github.com/ROCm/rocm-systems/archive/{sha}.tar.gz',
+                                     'dev-libs/rocm-core-10.0.0',
+                                     LivecheckSettings(),
+                                     force_sha=False)
+
+    assert result == ('10.1', 'e' * 40, '')
+
+
+@pytest.mark.asyncio
+async def test_get_latest_github_pinned_commit_not_a_tag_uses_branch(mocker: MockerFixture) -> None:
+    sha = 'f' * 40
+    _patch_github_api(
+        mocker, {
+            'https://api.github.com/repos/org/repo/tags?per_page=100&page=1': [{
+                'name': 'v1.0',
+                'commit': {
+                    'sha': 'a' * 40
+                }
+            }]
+        })
+    mock_commit = mocker.patch('livecheck.special.github.get_latest_github_commit',
+                               return_value=('abc123', '20260906'))
+    url = f'https://github.com/org/repo/archive/{sha}.tar.gz'
+
+    result = await get_latest_github(url,
+                                     'cat/repo-1.0_p20260101',
+                                     LivecheckSettings(),
+                                     force_sha=False)
+
+    assert result == ('', 'abc123', '20260906')
+    mock_commit.assert_called_once_with(url, 'master')
